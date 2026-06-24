@@ -1,7 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { computeInputDepMap, filterBuildDeps, isBuildDep } from '../dist/index.js';
+import {
+  assertDependenciesResolved,
+  computeInputDepMap,
+  filterBuildDeps,
+  isBuildDep,
+} from '../dist/index.js';
+
+test('assertDependenciesResolved: passes when every requested dep is in the resolved set', () => {
+  assert.doesNotThrow(() =>
+    assertDependenciesResolved({ react: '^19.0.0', 'react-dom': '^19.0.0' }, [
+      { n: 'react', v: '19.2.0', d: 0 },
+      { n: 'react-dom', v: '19.2.0', d: 0 },
+      { n: 'scheduler', v: '0.28.0', d: 1 }, // transitive — irrelevant
+    ]),
+  );
+});
+
+test('assertDependenciesResolved: throws naming a silently-dropped package', () => {
+  assert.throws(
+    () =>
+      assertDependenciesResolved({ react: '^19.0.0', 'lucide-react': '^1.21.0' }, [
+        { n: 'react', v: '19.3.0', d: 0 },
+      ]),
+    /Could not resolve package from the package CDN: "lucide-react@\^1\.21\.0"/,
+  );
+});
+
+test('assertDependenciesResolved: lists every missing package and pluralizes', () => {
+  assert.throws(
+    () => assertDependenciesResolved({ a: '^1.0.0', b: '^2.0.0' }, [{ n: 'c', v: '3.0.0', d: 0 }]),
+    /Could not resolve packages from the package CDN: "a@\^1\.0\.0", "b@\^2\.0\.0"/,
+  );
+});
+
+test('assertDependenciesResolved: presence anywhere (no depth assumption), empty is a no-op', () => {
+  assert.doesNotThrow(() => assertDependenciesResolved({ react: '^19.0.0' }, [{ n: 'react', v: '19.2.0', d: 7 }]));
+  assert.doesNotThrow(() => assertDependenciesResolved({}, []));
+});
 
 test('computeInputDepMap: augments, filters build deps, strips self-hosted, sorts', () => {
   const out = computeInputDepMap({

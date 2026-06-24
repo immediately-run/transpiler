@@ -33,9 +33,10 @@ export {
   REACT_REFRESH_RUNTIME,
 } from './react-refresh/wrap';
 
-// Dependency-map facts the CLI needs to compute the lockset input.
-export { computeInputDepMap } from './depmap';
-export type { DepMap } from './depmap';
+// Dependency-map facts the CLI needs to compute the lockset input, plus the
+// resolution-completeness guard shared with the sandbox runtime + CLI builder.
+export { computeInputDepMap, assertDependenciesResolved } from './depmap';
+export type { DepMap, ResolvedDependency } from './depmap';
 export { filterBuildDeps, isBuildDep } from './presets/build-dep';
 
 // Toolchain stamping.
