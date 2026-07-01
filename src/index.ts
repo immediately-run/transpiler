@@ -1,7 +1,7 @@
 // @immediately-run/transpiler — the single source of truth for immediately.run's
-// per-file transform chain (Babel + react-refresh), shared byte-for-byte between
-// the browser sandbox bundler and the CLI's pre-transpiled-artifact emitter.
-// See PRETRANSPILED_ARTIFACTS_SPEC §4.4.
+// per-file transform chain (MDX + Babel + react-refresh), shared byte-for-byte
+// between the browser sandbox bundler and the CLI's pre-transpiled-artifact
+// emitter. See PRETRANSPILED_ARTIFACTS_SPEC §4.4 + MDX_CONTENT_COLLECTIONS_SPEC §1.
 
 export { TRANSPILER_VERSION, PRESET_NAME } from './version';
 
@@ -32,6 +32,14 @@ export {
   HELPER_CODE,
   REACT_REFRESH_RUNTIME,
 } from './react-refresh/wrap';
+
+// MDX: the compile stage + the shared frontmatter parser. The sandbox routes its
+// `MDXTransformer` + `frontmatter.ts` through these (MDX_CONTENT_COLLECTIONS_SPEC
+// §1.1), and the CLI's cache-zip metadata sidecar (G-MDX-3) will reuse
+// `parseFrontmatter` so its values are byte-identical to the live scan.
+export { compileMdx, MdxCompileError } from './mdx/compile';
+export { parseFrontmatter } from './mdx/frontmatter';
+export type { FrontmatterParseResult } from './mdx/frontmatter';
 
 // Dependency-map facts the CLI needs to compute the lockset input, plus the
 // resolution-completeness guard shared with the sandbox runtime + CLI builder.

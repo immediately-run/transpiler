@@ -17,5 +17,11 @@ export default defineConfig({
     '@babel/standalone',
     '@babel/plugin-proposal-explicit-resource-management',
     'react-refresh/babel',
+    // ESM-only; loaded via a dynamic `import()` in src/mdx/compile.ts and kept
+    // external so the CJS build never statically `require()`s them (and so the
+    // resolved version — which affects the emitted MDX bytes — is the consumer's
+    // installed copy, like the babel deps above).
+    '@mdx-js/mdx',
+    'remark-gfm',
   ],
 });

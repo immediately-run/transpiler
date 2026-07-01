@@ -43,5 +43,14 @@
     "deps": [
       "./inner"
     ]
+  },
+  {
+    "id": "post-mdx",
+    "path": "/app/content/post.mdx",
+    "deps": [
+      "@immediately-run/sdk/MDXProvider",
+      "react/jsx-runtime",
+      "/node_modules/__csb_bust/refresh-helper.js"
+    ]
   }
 ]
