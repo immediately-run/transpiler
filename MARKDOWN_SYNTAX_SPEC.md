@@ -4,9 +4,11 @@
 
 > **This document is now two things at once.** §1–§9 are `reference` — hand-mirrored
 > from the shipped compile chain (`src/mdx/`), describing what the code compiles
-> *today*. §11 (the component-resolution model), §12 (admonitions), §13 (wiki-links),
-> and §14 (ESM-in-links) are `proposal` — the **v1 support target**, not yet built,
-> owned by roadmap items **R3-151…R3-154** (`docs/ENGINEERING_ROADMAP3.md`; §11/R3-151 is the
+> *today*. §11 (the component-resolution model) is now also `reference` — the
+> phantom-defaults + `boot()` merge mechanism it describes shipped in the SDK
+> (R3-151, `@immediately-run/sdk` ≥ 0.23.0). §12 (admonitions), §13 (wiki-links),
+> and §14 (ESM-in-links) remain `proposal` — the **v1 support target**, not yet built,
+> owned by roadmap items **R3-152…R3-154** (`docs/ENGINEERING_ROADMAP3.md`; §11/R3-151 was the
 > foundation the rest depend on). Every §-block carries a *(reference)* or
 > *(proposal — …)* label; **never read a proposal block as describing shipped
 > behavior.** When a proposal lands, its block flips to *(reference)* in the same edit
@@ -372,7 +374,7 @@ plugin (§12, §13).
 
 ---
 
-## 11. Component resolution & the phantom-default layer  *(proposal — owned by R3-151)*
+## 11. Component resolution & the phantom-default layer  *(reference — shipped by R3-151, `@immediately-run/sdk` ≥ 0.23.0)*
 
 This section generalizes §6.4 into the mechanism the v1 syntax features (§12, §13) rely on. It
 adds **no new transpiler machinery and no new host machinery** — it is a naming of, and a small
@@ -411,14 +413,15 @@ map, delivered through the already-synthesized `boot()` call.
 ### 11.3 Override semantics: `boot()` merges over the defaults
 
 For the late-binding override in §11.1 to be ergonomic, an app must be able to override **one**
-default component without re-declaring the rest. Today `boot({ mdxComponents })` **replaces** the
-default map (which is why Grove spreads `...DEFAULT_MDX_COMPONENTS` by hand). v1 changes `boot()`
-to **merge** the caller's map over the defaults — `{ ...DEFAULT_MDX_COMPONENTS, ...mdxComponents }`
-— so overriding `WikiLink` alone keeps the default `a` and `Admonition`. The
+default component without re-declaring the rest. Historically `boot({ mdxComponents })` **replaced**
+the default map (which is why Grove spread `...DEFAULT_MDX_COMPONENTS` by hand). As of
+`@immediately-run/sdk` ≥ 0.23.0, `boot()` **merges** the caller's map over the defaults —
+`{ ...DEFAULT_MDX_COMPONENTS, ...mdxComponents }` — so overriding `WikiLink` alone keeps the
+default `a` and `Admonition`. The
 function-form (`mdxComponents: (defaults) => …`, already supported by `useMDXComponents`) remains
 the escape hatch for an app that wants full control.
 
-> **Honesty note:** this is a behavior change from today's replace semantics. It is
+> **Honesty note:** this was a behavior change from the previous replace semantics. It is
 > backward-safe for the common case (an app that only *adds* components), and it makes Grove's
 > explicit `...DEFAULT_MDX_COMPONENTS` spread unnecessary (though harmless). An app that
 > deliberately *removed* the default `a` by passing a map without it would now keep the default;
