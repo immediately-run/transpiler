@@ -33,12 +33,17 @@ the sandbox's `ReactPreset.mapTransformers` does:
 
 | path | chain |
 | --- | --- |
+| app-root `.md .mdx` | MDX compile **+** Babel(react-refresh) **+ HMR wrapper** |
 | app-root `.js .jsx .mjs .cjs .tsx` | Babel(react-refresh) **+ HMR wrapper** |
 | app-root `.ts .mts .cts`, anything under `/node_modules/` | plain Babel(react) |
-| `.d.ts`, `.css`, `.mdx`, … | not owned → `{ error }` |
+| `.d.ts`, `.css`, a `/node_modules/` `.md(x)`, … | not owned → `{ error }` |
 
 It never throws: a Babel error or an unsupported path returns `{ error }` so a
 caller can skip a single bad file.
+
+For the **Markdown/MDX syntax** an app may use (what the `.md`/`.mdx` compile stage
+parses — CommonMark + GFM + MDX components/expressions/ESM, frontmatter, and the
+deviations from plain Markdown), see [`MARKDOWN_SYNTAX_SPEC.md`](MARKDOWN_SYNTAX_SPEC.md).
 
 ## The byte-identity gate
 
