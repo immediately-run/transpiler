@@ -6,9 +6,11 @@
 > from the shipped compile chain (`src/mdx/`), describing what the code compiles
 > *today*. §11 (the component-resolution model) is now also `reference` — the
 > phantom-defaults + `boot()` merge mechanism it describes shipped in the SDK
-> (R3-151, `@immediately-run/sdk` ≥ 0.23.0). §12 (admonitions), §13 (wiki-links),
-> and §14 (ESM-in-links) remain `proposal` — the **v1 support target**, not yet built,
-> owned by roadmap items **R3-152…R3-154** (`docs/ENGINEERING_ROADMAP3.md`; §11/R3-151 was the
+> (R3-151, `@immediately-run/sdk` ≥ 0.23.0). §12 (admonitions) is `reference` too —
+> the in-house remark plugin it describes shipped in this package (R3-152,
+> `src/mdx/remarkAdmonitions.ts`). §13 (wiki-links) and §14 (ESM-in-links) remain
+> `proposal` — the **v1 support target**, not yet built, owned by roadmap items
+> **R3-153/R3-154** (`docs/ENGINEERING_ROADMAP3.md`; §11/R3-151 was the
 > foundation the rest depend on). Every §-block carries a *(reference)* or
 > *(proposal — …)* label; **never read a proposal block as describing shipped
 > behavior.** When a proposal lands, its block flips to *(reference)* in the same edit
@@ -438,7 +440,7 @@ mechanism, and per-subtree component packs are already expressible declaratively
 
 ---
 
-## 12. GitHub-style admonitions  *(proposal — owned by R3-152, depends on R3-151)*
+## 12. GitHub-style admonitions  *(reference — shipped by R3-152, `src/mdx/remarkAdmonitions.ts`)*
 
 ### 12.1 Syntax
 
@@ -452,8 +454,13 @@ The GitHub blockquote-alert forms, on a blockquote whose first line is exactly t
 > Something that could cause a problem.
 ```
 
-Recognized types: `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, `CAUTION` (case per GitHub). A
-blockquote whose first line is not one of these markers stays an ordinary blockquote.
+Recognized types: `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`. The type keyword is matched
+**case-insensitively** (as GitHub's cmark-gfm alert extension does — `[!note]` works), and the
+emitted `type` attribute is always lower-cased to match the SDK's `AdmonitionType` union. The
+marker must occupy its **own line** — it is followed by a line break (the body starts on the next
+line) or it is the blockquote's sole content (a title-only admonition). A blockquote whose first
+line is not one of these markers — or whose marker shares its line with other content
+(`> [!NOTE] text`) — stays an ordinary blockquote.
 
 ### 12.2 Implementation — an in-house plugin
 
