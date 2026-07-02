@@ -8,9 +8,11 @@
 > phantom-defaults + `boot()` merge mechanism it describes shipped in the SDK
 > (R3-151, `@immediately-run/sdk` ≥ 0.23.0). §12 (admonitions) is `reference` too —
 > the in-house remark plugin it describes shipped in this package (R3-152,
-> `src/mdx/remarkAdmonitions.ts`). §13 (wiki-links) and §14 (ESM-in-links) remain
-> `proposal` — the **v1 support target**, not yet built, owned by roadmap items
-> **R3-153/R3-154** (`docs/ENGINEERING_ROADMAP3.md`; §11/R3-151 was the
+> `src/mdx/remarkAdmonitions.ts`). §13 (wiki-links) is `reference` too — the kernel
+> `[[…]]` plugin shipped here (R3-153, `src/mdx/remarkWikiLinks.ts`) and the default
+> resolving `<WikiLink>` shipped in the SDK. §14 (ESM-in-links) remains `proposal` —
+> the **v1 support target**, not yet built, owned by roadmap item
+> **R3-154** (`docs/ENGINEERING_ROADMAP3.md`; §11/R3-151 was the
 > foundation the rest depend on). Every §-block carries a *(reference)* or
 > *(proposal — …)* label; **never read a proposal block as describing shipped
 > behavior.** When a proposal lands, its block flips to *(reference)* in the same edit
@@ -493,7 +495,7 @@ system.
 
 ---
 
-## 13. WikiLinks  *(proposal — owned by R3-153, depends on R3-151)*
+## 13. WikiLinks  *(reference — shipped by R3-153: kernel `src/mdx/remarkWikiLinks.ts` + SDK default `<WikiLink>`)*
 
 ### 13.1 Syntax
 
@@ -523,13 +525,27 @@ v1 therefore **splits parsing from resolution**:
 - **Kernel (compile time):** a small in-house remark plugin (as §12.2) turns `[[target]]` and
   `[[label|target]]` into a `<WikiLink target="…" label="…">` node, carrying the **raw** target
   and label verbatim. It resolves **nothing** — keeping the plugin trivial and the output
-  obviously byte-local (§10 Must-establish).
+  obviously byte-local (§10 Must-establish): the emitted node depends only on the `[[…]]` bytes,
+  not on the compiling file's path or on which other files exist.
 - **SDK component (runtime):** the default `<WikiLink>` computes the target path (relative→current
-  dir, or absolute) and checks **existence** against the live metadata index (`useMetadataQuery`)
-  for the resolved / broken / self state, routing resolved links through the existing `<Link>`
-  in-app router. This is exactly the pattern Grove's `WikiLink.tsx` already prototypes — and
-  notably Grove already resolves only path-based hrefs and never does a name search, so the
-  path-only rule (§13.3) matches the proven prototype — §10 anchors it.
+  dir, or absolute) and checks **existence** against the live metadata index (`filesMetadata`,
+  keyed by absolute `/app/…` paths) for the resolved / broken / self state, routing resolved links
+  through the existing `<Link>` in-app router. It learns the **current file** — the file the link is
+  *authored in* — from the machinery that already exists: every MDX file is rendered through
+  `<Include>` (`FileRouter` renders even the top-level file that way), and `Include` /
+  `RenderExportedComponent` publish the rendered module's `EvaluationContext` to their subtree via
+  `RenderExportedComponentContext`. The component reads the **nearest** such context, whose
+  `evaluation.module.filepath` is the authoring file's own `/app/…` path — so a relative target
+  resolves against *that* file's directory and the self-link check compares against it, with no
+  per-node compile-time help. This matters for composition: if `MainPage.mdx` `<Include>`s
+  `nav/NavSection.mdx` and the fragment contains `[[../demos.mdx]]`, the nearest context is
+  `NavSection.mdx`, so the target resolves to `demos.mdx` **relative to the fragment**, not to the
+  top-level page in the URL — because `RenderExportedComponentContext` nests with each `<Include>`.
+  This is the pattern Grove's `WikiLink.tsx` already prototypes — and notably Grove already resolves
+  only path-based hrefs and never does a name search, so the path-only rule (§13.3) matches the
+  proven prototype — §10 anchors it. An app that renders MDX **without** `<Include>` overrides
+  `<WikiLink>` (§11) for precise resolution; the default degrades gracefully (a relative target with
+  no ambient render context routes optimistically).
 
 ### 13.3 Resolution rules (default `<WikiLink>`)
 
@@ -558,9 +574,10 @@ always present in the defaults, a plain repo renders wiki-links with no app coop
 
 - **`|` vs GFM tables:** the pipe inside `[[label|target]]` must survive `remark-gfm`'s table
   tokenizer; plugin ordering is gated (§10 Must-establish).
-- **Value-3 behavior change:** content that today renders literal `[[…]]` text (§8) will begin
-  rendering as wiki-links. This is within the existing MDX-deviation budget but is flagged for
-  authors of pre-existing Obsidian-style content.
+- **Value-3 behavior change:** content that previously rendered literal `[[…]]` text (§8) now
+  renders as wiki-links. This is within the existing MDX-deviation budget but is flagged for
+  authors of pre-existing Obsidian-style content. (Literal `[[…]]` inside an inline code span or
+  code block is untouched — the plugin only rewrites `text` nodes.)
 
 ---
 
@@ -596,7 +613,7 @@ fragile custom transform, is ambiguous (URLs legitimately contain `{`/`}`), and 
 `[[{someFilename()}]]` is **not** supported. The target inside `[[…]]` is literal, exactly as a
 markdown link destination is (§14.2) — the wiki-link plugin never evaluates an expression in the
 target position. Keeping `[[…]]` consistent with `[…](…)` is the point (see Decisions). For a
-dynamic target, use JSX once §13 lands: `<WikiLink target={someFilename()} />`.
+dynamic target, use JSX with §13's component directly: `<WikiLink target={someFilename()} />`.
 
 ### 14.4 Content is code (content-trust note)
 

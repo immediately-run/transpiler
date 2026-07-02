@@ -2,6 +2,7 @@ import type { PluggableList } from 'unified';
 
 import { parseFrontmatter } from './frontmatter';
 import remarkAdmonitions from './remarkAdmonitions';
+import remarkWikiLinks from './remarkWikiLinks';
 
 // The MDX compile half of the `.mdx` chain — moved verbatim from
 // `sandbox/src/bundler/transforms/mdx/index.ts` (the `MDXTransformer.transform`
@@ -76,9 +77,10 @@ export async function compileMdx(code: string, path: string): Promise<string> {
         outputFormat: 'program',
         recmaPlugins,
         rehypePlugins,
-        // remark-gfm first (its extensions never touch the alert wrapper), then
-        // the in-house admonition transform (§12). Purely local; no ESM-only dep.
-        remarkPlugins: [[remarkGfm], [remarkAdmonitions]],
+        // remark-gfm first (so table cells are parsed), then the in-house
+        // transforms: admonitions (§12) and wiki-links (§13). Both are purely
+        // local (no ESM-only dep, no cross-file resolution).
+        remarkPlugins: [[remarkGfm], [remarkAdmonitions], [remarkWikiLinks]],
       },
     );
     return String(compilerOutput.value);
