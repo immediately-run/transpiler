@@ -40,6 +40,10 @@ the sandbox's `ReactPreset.mapTransformers` does:
 It never throws: a Babel error or an unsupported path returns `{ error }` so a
 caller can skip a single bad file.
 
+For the **Markdown/MDX syntax** an app may use (what the `.md`/`.mdx` compile stage
+parses — CommonMark + GFM + MDX components/expressions/ESM, frontmatter, and the
+deviations from plain Markdown), see [`MARKDOWN_SYNTAX_SPEC.md`](MARKDOWN_SYNTAX_SPEC.md).
+
 ## The byte-identity gate
 
 `test/parity.test.mjs` asserts `transformFile` reproduces the committed golden
