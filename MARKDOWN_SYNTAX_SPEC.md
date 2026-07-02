@@ -1,20 +1,36 @@
-# immediately.run Markdown / MDX syntax — the syntax the transpiler compiles
+# immediately.run Markdown / MDX syntax — the v1 authoring target
 
-**Status:** reference — hand-mirrored from `src/mdx/` (the shipped compile chain) · **Updated:** 2026-07-02
+**Status:** draft — the v1 MDX support target (built surface + v1 proposals) · **Updated:** 2026-07-02
 
-> **Reads first:** `src/mdx/compile.ts` (the `@mdx-js/mdx` compile call this document
-> describes), `src/mdx/frontmatter.ts` (the frontmatter/excerpt parser),
-> `src/presets/react.ts` (which paths are treated as MDX). For the *pipeline* that consumes
-> this output — the cache-zip artifact, the frontmatter sidecar, the boot snapshot — see the
-> docs-repo `MDX_CONTENT_COLLECTIONS_SPEC.md`; **this document is only the author-facing
-> syntax surface**, not the caching machinery.
+> **This document is now two things at once.** §1–§9 are `reference` — hand-mirrored
+> from the shipped compile chain (`src/mdx/`), describing what the code compiles
+> *today*. §11 (the component-resolution model), §12 (admonitions), §13 (wiki-links),
+> and §14 (ESM-in-links) are `proposal` — the **v1 support target**, not yet built,
+> owned by roadmap items **R3-151…R3-154** (`docs/ENGINEERING_ROADMAP3.md`; §11/R3-151 is the
+> foundation the rest depend on). Every §-block carries a *(reference)* or
+> *(proposal — …)* label; **never read a proposal block as describing shipped
+> behavior.** When a proposal lands, its block flips to *(reference)* in the same edit
+> that ships it.
 
-This document is the source of truth for **which Markdown/MDX syntax an immediately.run app
-may use**. It is derived from the compile configuration in this package — it describes what
-the code *does* compile, not an aspiration. Because the browser sandbox and the CLI both call
-this package's `compileMdx`, the syntax described here is identical whether a file is
-transpiled live in the sandbox or pre-transpiled into a cache zip (byte-identity is the whole
-point of the shared package — README, `MDX_CONTENT_COLLECTIONS_SPEC §1.1`).
+> **Reads first:** `src/mdx/compile.ts` (the `@mdx-js/mdx` compile call §1 describes),
+> `src/mdx/frontmatter.ts` (the frontmatter/excerpt parser), `src/presets/react.ts`
+> (which paths are treated as MDX). For the v1 proposals also read:
+> `BOOT_SCAFFOLDING_SPEC.md §4` (the read-only boot-defaults layer the phantom-component
+> model in §11 extends), `MDX_CONTENT_COLLECTIONS_SPEC.md §1.1` (the byte-identity
+> constraint every new remark plugin must preserve), and `core_concepts.md §8` (content
+> trust — MDX content is executable code). For the *pipeline* that consumes this output —
+> the cache-zip artifact, the frontmatter sidecar, the boot snapshot — see the docs-repo
+> `MDX_CONTENT_COLLECTIONS_SPEC.md`; **this document is only the author-facing syntax
+> surface**, not the caching machinery.
+
+The syntax an immediately.run app may use is what this package's `compileMdx` accepts.
+Because the browser sandbox and the CLI both call `compileMdx`, the surface is identical
+whether a file is transpiled live in the sandbox or pre-transpiled into a cache zip
+(byte-identity is the whole point of the shared package — README,
+`MDX_CONTENT_COLLECTIONS_SPEC §1.1`). The v1 proposals in this document are written to
+**preserve that byte-identity** and the "a repo of plain markdown just works" guarantee
+(`product_values.md` value 3); the invariants that protect both are stated inline and
+gated in §10.
 
 ---
 
@@ -30,9 +46,9 @@ compile(
   {
     development: true,           // embeds the source path in jsxDEV debug info
     jsx: true,                   // emit JSX (Babel lowers it afterwards)
-    providerImportSource: '@immediately-run/sdk/MDXProvider',  // component resolution (§6)
+    providerImportSource: '@immediately-run/sdk/MDXProvider',  // component resolution (§6, §11)
     outputFormat: 'program',     // a module: `export default MDXContent`
-    remarkPlugins: [[remarkGfm]],// GFM (§5)
+    remarkPlugins: [[remarkGfm]],// GFM (§5); the v1 proposals add pinned plugins here (§12, §13)
     recmaPlugins: [],            // none
     rehypePlugins: [],           // none
   },
@@ -50,7 +66,7 @@ The consequences an author must know follow directly from these choices:
   Anything of that kind is the app's job (a component, or a plugin added in a fork).
 - Components are resolved through the SDK **MDXProvider** (`providerImportSource`), so an
   undefined component is a **runtime error**, and Markdown links are routed through the SDK's
-  in-app navigation by default (§6).
+  in-app navigation by default (§6, generalized in §11).
 
 ---
 
@@ -164,6 +180,10 @@ rule. (This is standard CommonMark, restated because it surprises authors.)
   prefer the bare form or an explicit `[text](url)`.)
 - **Footnotes** — `text[^1]` with a `[^1]: definition` block.
 
+> **GFM admonitions are *not* part of GFM's remark plugin.** GitHub renders `> [!NOTE]`
+> blockquote alerts on github.com, but `remark-gfm` does not implement them — today they
+> render as a plain blockquote (§7). Adding them is the v1 target — see §12 (proposal).
+
 ---
 
 ## 6. MDX extensions — components, expressions, ESM  *(reference)*
@@ -181,7 +201,7 @@ A self-closing component: <Hr />
 ```
 
 - **Capitalized name → component; lowercase name → HTML element.** `<Callout>` is a component
-  (resolved per §6.4); `<div>` is a literal `<div>`. This is JSX's rule, not a Markdown one.
+  (resolved per §6.4 / §11); `<div>` is a literal `<div>`. This is JSX's rule, not a Markdown one.
 - **Tags must be well-formed and closed.** MDX is XML-strict: `<br>` must be `<br/>`, every
   element must close, attributes are JSX (`className`, not `class`; `{expr}` for values).
 - **Markdown inside a component's children is still parsed** when there is a blank line, per
@@ -198,7 +218,8 @@ Two plus two is {2 + 2}.
 ```
 
 `props` is the props object the renderer passes to the compiled `MDXContent` component. See
-§3 — frontmatter is **not** in `props` by default.
+§3 — frontmatter is **not** in `props` by default. Expression support extends into link
+*labels* (§14).
 
 ### 6.3 ESM `import` / `export`
 
@@ -218,7 +239,7 @@ stage records them, so a pre-transpiled artifact carries the right specifiers).
 
 `providerImportSource: '@immediately-run/sdk/MDXProvider'` means a component that is used but
 not `import`ed/`export`ed in the file is looked up from the surrounding **MDXProvider**
-context (SDK `useMDXComponents`). Two consequences:
+context (SDK `useMDXComponents`). Two consequences hold *today*:
 
 - **A referenced-but-unprovided component is a runtime error** — MDX emits a
   `_missingMdxReference("Callout", …)` guard, so rendering `<Callout>` with no provider entry
@@ -230,6 +251,8 @@ context (SDK `useMDXComponents`). Two consequences:
   within the app instead of doing a full-page load; external hrefs render as a normal `<a>`.
   Any intrinsic element (`h1`, `p`, `td`, …) can likewise be overridden through the provider.
 
+§11 generalizes this into the **component late-binding model** the v1 proposals build on.
+
 ### 6.5 Comments
 
 Use an **expression comment**: `{/* this is a comment */}`. HTML comments (`<!-- … -->`) are
@@ -237,18 +260,24 @@ Use an **expression comment**: `{/* this is a comment */}`. HTML comments (`<!--
 
 ---
 
-## 7. What is deliberately *not* enabled  *(reference)*
+## 7. What is *not* enabled in the built surface  *(reference)*
 
-`recmaPlugins` and `rehypePlugins` are both empty, so none of the following happen at compile
-time — provide them yourself (a component, a fork adding a plugin, or app CSS/JS):
+`recmaPlugins` and `rehypePlugins` are both empty and the only remark plugin is `remark-gfm`,
+so none of the following happen at compile time *today* — provide them yourself (a component, a
+fork adding a plugin, or app CSS/JS):
 
 - **No heading anchors / slugs** — headings get no `id` and no `#` link. (No `rehype-slug` /
-  `rehype-autolink-headings`.)
+  `rehype-autolink-headings`.) *No v1 change planned — see the Open questions.*
 - **No syntax highlighting** — a fenced code block's info string (` ```ts `) is passed through
   as a `className` on `<code>`, but nothing tokenises it. Bring a highlighter component.
+  *No v1 change planned.*
 - **No raw-HTML re-parsing** — HTML in the source is JSX (§6.1), not run through
-  `rehype-raw`. It must be valid JSX.
-- **No smart typography / GitHub-style admonitions** — plain text is rendered as written.
+  `rehype-raw`. It must be valid JSX. *No v1 change planned.*
+- **No smart typography** — plain text is rendered as written.
+- **No GitHub-style admonitions and no `[[wiki-links]]`** — `> [!NOTE]` renders as a plain
+  blockquote and `[[x]]` renders as literal text *today*. **These two are the v1 target** —
+  see §12 and §13 (proposal). They are called out here so the reference surface stays honest
+  about the current state.
 
 ---
 
@@ -267,12 +296,16 @@ These follow from compiling as MDX and bite authors migrating plain `.md`:
 - **`.md` is MDX too** (§2) — all of the above apply to `.md`, not only `.mdx`.
 - **`<More />` is reserved** as the excerpt marker (§3.1); using it as a normal component name
   will truncate your rendered body.
+- **`[[…]]` renders as literal text today.** CommonMark treats `[[x]]` as bracketed text, not a
+  link — so an Obsidian-style wiki-link is inert on the current surface. §13 (proposal) changes
+  this; authors of existing content that contains literal `[[…]]` should note the planned
+  behavior change.
 
 ---
 
-## 9. Worked example
+## 9. Worked example  *(reference)*
 
-The package's own fixture (`test/fixtures/post.mdx`) exercises the surface end-to-end:
+The package's own fixture (`test/fixtures/post.mdx`) exercises the built surface end-to-end:
 
 ````mdx
 ---
@@ -308,15 +341,262 @@ Compiling it yields (golden `test/golden/post-mdx.out.js`): frontmatter stripped
 |---|---|---|
 | MDX compiled by `@mdx-js/mdx` with GFM, `jsx:true`, program output, the SDK provider source | `src/mdx/compile.ts` | `providerImportSource: '@immediately-run/sdk/MDXProvider'` |
 | Only `remark-gfm` — no rehype/recma plugins | `src/mdx/compile.ts` | `const rehypePlugins: PluggableList = [];` |
+| ESM-only remark deps are loaded via a memoised dynamic `import()` (the pattern any new plugin follows) | `src/mdx/compile.ts` | `function loadMdxDeps` |
 | `.md` **and** `.mdx`, app-root only, case-insensitive, route to the MDX stage | `src/presets/react.ts` | `MDX_APP_ROOT_RE = /^(?!\/node_modules\/).*\.mdx?$/i` |
 | Frontmatter is stripped before compile via the YAML-1.2 parser | `src/mdx/frontmatter.ts` | `FRONTMATTER_RE` |
 | `<More />` lifts the prefix to `excerpt` and removes it from the body | `src/mdx/frontmatter.ts` | `EXCERPT_SEPARATOR = '<More />'` |
 | The default `a` override routes same-app links through the sandbox router | `immediately-run-sdk/src/components/MDXComponents.tsx` | `DEFAULT_MDX_COMPONENTS` |
+| `boot()` applies `DEFAULT_MDX_COMPONENTS` when the caller passes no `mdxComponents` | `immediately-run-sdk/src/boot.tsx` | `mdxComponents = DEFAULT_MDX_COMPONENTS` |
+| `useMDXComponents` merges caller overrides onto the surrounding provider context | `immediately-run-sdk/src/MDXProvider.ts` | `useMDXComponents` |
+| A code-less repo boots via a synthesized read-only `/index.tsx` = `boot()` (the phantom-defaults seam §11 extends) | `immediately-run-site-main/src/filesystem/bootDefaults.ts` | `BOOT_DEFAULT_FILES` |
+| Runtime (not compile-time) wiki-link resolution against the metadata index is already viable (Grove's prototype) | `grove/src/components/WikiLink.tsx` | `useMetadataQuery` |
 | An unprovided component throws via the missing-reference guard | `test/golden/post-mdx.out.js` | `_missingMdxReference("Callout"` |
 | GFM strikethrough/table compile to `del`/`table` elements | `test/golden/post-mdx.out.js` | `del: "del"` |
+| Verified probe: `[{fn()}](url)` → `<a href="url">{fn()}</a>` (label expressions evaluate) | `src/mdx/compile.ts` | `providerImportSource` (compile behavior; §14) |
+| Verified probe: `[x]({fn()})` → `href="%7Bfn()%7D"` (URL braces are literal, URL-encoded, not evaluated) | `src/mdx/compile.ts` | `providerImportSource` (compile behavior; §14) |
 
 Pinned dependency versions live in `package.json` (`@mdx-js/mdx`, `remark-gfm`, `yaml`); the
-syntax surface changes only on a deliberate bump of those pins.
+syntax surface changes only on a deliberate bump of those pins or the addition of a pinned
+plugin (§12, §13).
+
+### Must-establish (new invariants the v1 proposals create)
+
+| New invariant | Proven by (gate test) |
+|---|---|
+| The admonition plugin is byte-identical across the sandbox (browser) and CLI (Node) paths | Golden-output test: `> [!NOTE]` compiles to the same bytes under both entry points |
+| `> [!NOTE]` compiles to `<Admonition …>` **and** the SDK default is always present | Plain-repo render test: a code-less repo renders an admonition with **no** `_missingMdxReference` throw |
+| The wiki-link plugin emits only the raw target/label — it resolves **nothing** against other files | Byte-identity test: file A's compiled output is identical whether or not file B exists |
+| The default `<WikiLink>` resolves relative / absolute / bare-name targets at runtime; ambiguous or missing → broken-link state | SDK `WikiLink` unit tests over the three target forms + a missing target |
+| A `\|` inside `[[label\|target]]` survives `remark-gfm`'s table parsing | Plugin-ordering test: `[[a\|b.mdx]]` in and out of a table context |
+| `boot({ mdxComponents })` **merges** the app map over the defaults (override one, keep the rest) | `boot` test: an app that overrides only `WikiLink` still receives the default `a` + `Admonition` |
+
+---
+
+## 11. Component resolution & the phantom-default layer  *(proposal — owned by R3-151)*
+
+This section generalizes §6.4 into the mechanism the v1 syntax features (§12, §13) rely on. It
+adds **no new transpiler machinery and no new host machinery** — it is a naming of, and a small
+SDK change to, the provider path that already exists.
+
+### 11.1 Components are the platform's late-binding seam
+
+The kernel compiles certain markdown syntax to **components** rather than intrinsic HTML:
+admonitions → `<Admonition>` (§12), wiki-links → `<WikiLink>` (§13), and Markdown links already
+→ the provider's `a` (§6.4). Compiling to a component (resolved at render through the
+MDXProvider) rather than to a fixed `<div class>`/`<a href>` is deliberate: it gives **late
+binding**. A Grove wiki overrides `<WikiLink>` **once** in its `boot()` call and thereby changes
+how *every* link in *every* content file renders — its resolved/broken/self states, its icons,
+its routing — **without touching any content**. An intrinsic element with a class can be
+*restyled* but not *re-behaviored*; a component can be both.
+
+### 11.2 The phantom defaults keep "plain markdown just works"
+
+Compiling to a component would normally reintroduce the §6.4 hazard: a plain-markdown repo that
+never calls `boot({ mdxComponents })` would hit the `_missingMdxReference` guard and **throw**
+on the first admonition or wiki-link. The phantom-default layer removes that hazard by reusing
+scaffolding that already exists:
+
+- `BootDefaultsFS` (BOOT_SCAFFOLDING_SPEC §4) serves a read-only `/index.tsx` =
+  `import { boot } from "@immediately-run/sdk/boot"; boot();` for any repo that ships no entry of
+  its own (`bootDefaults.ts` `BOOT_DEFAULT_FILES`).
+- `boot()` called with no arguments applies `DEFAULT_MDX_COMPONENTS` (`boot.tsx`).
+
+So the "phantom default components" are simply an **expanded `DEFAULT_MDX_COMPONENTS`** in the
+SDK — it gains a default `Admonition` and a default `WikiLink` alongside the existing `a`
+override. A code-less markdown repo therefore renders working admonitions and wiki-links with
+**zero** app cooperation, and the missing-reference guard never fires for platform-emitted
+components. No synthetic component file is written anywhere; the "phantom" is the SDK default
+map, delivered through the already-synthesized `boot()` call.
+
+### 11.3 Override semantics: `boot()` merges over the defaults
+
+For the late-binding override in §11.1 to be ergonomic, an app must be able to override **one**
+default component without re-declaring the rest. Today `boot({ mdxComponents })` **replaces** the
+default map (which is why Grove spreads `...DEFAULT_MDX_COMPONENTS` by hand). v1 changes `boot()`
+to **merge** the caller's map over the defaults — `{ ...DEFAULT_MDX_COMPONENTS, ...mdxComponents }`
+— so overriding `WikiLink` alone keeps the default `a` and `Admonition`. The
+function-form (`mdxComponents: (defaults) => …`, already supported by `useMDXComponents`) remains
+the escape hatch for an app that wants full control.
+
+> **Honesty note:** this is a behavior change from today's replace semantics. It is
+> backward-safe for the common case (an app that only *adds* components), and it makes Grove's
+> explicit `...DEFAULT_MDX_COMPONENTS` spread unnecessary (though harmless). An app that
+> deliberately *removed* the default `a` by passing a map without it would now keep the default;
+> such an app uses the function-form instead.
+
+### 11.4 What is unchanged
+
+The missing-reference guard still applies to any component that is **neither** a platform default
+(§11.2) **nor** imported **nor** provided by the app — e.g. a hand-authored `<Callout>` with no
+provider entry still throws, exactly as §6.4 describes. Registering app-specific components remains
+a `boot({ mdxComponents })` (or nested `<MDXProvider>` / `React.lazy`) concern; there is **no**
+transpiler-level or post-boot imperative registration API — the provider *is* the registration
+mechanism, and per-subtree component packs are already expressible declaratively.
+
+---
+
+## 12. GitHub-style admonitions  *(proposal — owned by R3-152, depends on R3-151)*
+
+### 12.1 Syntax
+
+The GitHub blockquote-alert forms, on a blockquote whose first line is exactly the marker:
+
+```markdown
+> [!NOTE]
+> Useful information the reader should know.
+
+> [!WARNING]
+> Something that could cause a problem.
+```
+
+Recognized types: `NOTE`, `TIP`, `IMPORTANT`, `WARNING`, `CAUTION` (case per GitHub). A
+blockquote whose first line is not one of these markers stays an ordinary blockquote.
+
+### 12.2 Implementation — an in-house plugin
+
+The admonition transform is a **small in-house remark plugin defined in the transpiler package**,
+not a third-party dependency (see Decisions). It is added to `remarkPlugins` in `compile.ts`; it
+runs on the mdast tree the already-loaded `@mdx-js/mdx` provides, so it needs no ESM-only
+dependency of its own (a hand-walk of the tree, no `unist-util-visit`) and rides the existing
+`loadMdxDeps` load. The transform is **purely local** to the one file — it depends on no other
+file — so per-file byte-identity and pre-transpile caching are preserved (§10 Must-establish).
+
+It matches a blockquote whose first child paragraph begins with a `[!TYPE]` marker line, strips
+that marker, and rewrites the blockquote into an `mdxJsxFlowElement` named `Admonition` with a
+`type` attribute (`note` / `tip` / `important` / `warning` / `caution`) — i.e. it emits the
+component form §12.3 renders, directly, rather than post-processing another plugin's HTML/class
+output.
+
+### 12.3 Compile target and default
+
+An admonition compiles to `<Admonition type="note">…children…</Admonition>` (a component, per
+§11.1). The SDK ships a **default `Admonition`** in `DEFAULT_MDX_COMPONENTS` (§11.2) so a plain
+repo renders it without throwing. The default renders semantic, accessible markup (a labeled
+container with the type as a role/heading) with **intentionally minimal** styling; rich styling
+and icons are the app's job via CSS or an override — consistent with the "GFM on, presentation is
+app-owned" stance (§5, Decisions). A Grove-class app overrides `<Admonition>` to match its design
+system.
+
+> **Honesty note (v1):** the default `Admonition` is structural, not visually rich. Apps that want
+> GitHub's colored/iconed callouts either ship CSS targeting the default's classes or override the
+> component.
+
+---
+
+## 13. WikiLinks  *(proposal — owned by R3-153, depends on R3-151)*
+
+### 13.1 Syntax
+
+A wiki-link target is **always a path** — relative to the current file, or absolute. A bare
+filename is simply a relative path in the current directory; there is **no** vault-wide
+name search (§13.3, Decisions).
+
+```markdown
+[[relative/path/to/another.mdx]]      → relative path, resolved against the current file's dir
+[[another.mdx]]                       → a bare filename IS a relative path (current dir) — no search
+[[/app/docs/absolute/link.mdx]]       → absolute sandbox path
+[[My Favorite Link|another.mdx]]      → explicit label | target (target is a relative/absolute path)
+```
+
+### 13.2 The split: parse in the kernel, resolve in the component
+
+The hard constraint is **byte-identity / per-file caching**: a file's compiled output must depend
+only on that file's bytes, never on which *other* files exist. Because targets are paths (§13.1),
+the **target-path computation** is pure arithmetic — a relative path against the current file's
+own directory, or an absolute path taken verbatim — so it depends on nothing but the file itself.
+The only part that needs the *set* of files is the **existence check** (is the target actually
+there? → the resolved / broken / self visual state), and that is a **render** concern, never a
+compile concern.
+
+v1 therefore **splits parsing from resolution**:
+
+- **Kernel (compile time):** a small in-house remark plugin (as §12.2) turns `[[target]]` and
+  `[[label|target]]` into a `<WikiLink target="…" label="…">` node, carrying the **raw** target
+  and label verbatim. It resolves **nothing** — keeping the plugin trivial and the output
+  obviously byte-local (§10 Must-establish).
+- **SDK component (runtime):** the default `<WikiLink>` computes the target path (relative→current
+  dir, or absolute) and checks **existence** against the live metadata index (`useMetadataQuery`)
+  for the resolved / broken / self state, routing resolved links through the existing `<Link>`
+  in-app router. This is exactly the pattern Grove's `WikiLink.tsx` already prototypes — and
+  notably Grove already resolves only path-based hrefs and never does a name search, so the
+  path-only rule (§13.3) matches the proven prototype — §10 anchors it.
+
+### 13.3 Resolution rules (default `<WikiLink>`)
+
+Targets are **paths only** — there is **no implicit search path and no vault-wide name lookup**:
+
+- **Relative** (`a/b.mdx` or a bare `another.mdx`, no leading `/`): resolved against the current
+  file's directory. A filename with no slash is a relative path in the current dir — *not* a name
+  searched for across the collection.
+- **Absolute** (`/app/docs/x.mdx` or a `/files/…`-prefixed href): taken verbatim.
+- **Missing target** (the computed path has no existing file): renders the **broken-link** state
+  (not a throw). There is no ambiguity to resolve — a path names exactly one location.
+- **Label:** `[[label|target]]` uses `label` as the visible text; `[[target]]` uses a
+  target-derived label (basename without extension).
+
+The default `<WikiLink>` is overridable per §11 — a wiki app supplies its own resolution/states
+(the headline late-binding capability). Because the emitted node is a `<WikiLink>` component
+always present in the defaults, a plain repo renders wiki-links with no app cooperation.
+
+> **Referring to a document by a short human name is deliberately *not* the wiki-link's job.**
+> Resolving a name to a path via a search would make a link's target change when unrelated files
+> are added (see Decisions). That convenience is a **separate, future initiative** — an explicit,
+> opt-in component that resolves a document's `title` frontmatter attribute to a path — distinct
+> from this link syntax and out of scope here.
+
+### 13.4 Interaction notes
+
+- **`|` vs GFM tables:** the pipe inside `[[label|target]]` must survive `remark-gfm`'s table
+  tokenizer; plugin ordering is gated (§10 Must-establish).
+- **Value-3 behavior change:** content that today renders literal `[[…]]` text (§8) will begin
+  rendering as wiki-links. This is within the existing MDX-deviation budget but is flagged for
+  authors of pre-existing Obsidian-style content.
+
+---
+
+## 14. ESM expressions in link labels, URLs, and wiki targets  *(mixed — owned by R3-154)*
+
+The four requested forms split three ways by feasibility (all verified against the real compiler —
+§10):
+
+### 14.1 Labels — supported today  *(reference)*
+
+`[{dynamicLinkLabel()}](http://mysite.com)` compiles to `<a href="http://mysite.com">{dynamicLinkLabel()}</a>`
+— a link whose **label** is an evaluated expression. This works now because a link label is
+phrasing content and MDX evaluates `{…}` there. Documented as supported; needs only a test to
+lock it.
+
+### 14.2 URLs — use JSX, not markdown link syntax  *(proposal — resolved: JSX)*
+
+`[Click here]({dynamicUrl()})` does **not** evaluate — the CommonMark link *destination* is a
+string grammar, so `{dynamicUrl()}` is treated as literal URL text and URL-encoded
+(`href="%7BdynamicUrl()%7D"`, verified). The supported path for a dynamic URL is **JSX**, which
+works today:
+
+```mdx
+<a href={dynamicUrl()}>Click here</a>
+```
+
+v1 does **not** add expression evaluation inside markdown link destinations: it would require a
+fragile custom transform, is ambiguous (URLs legitimately contain `{`/`}`), and reinvents what
+`<a href={…}>` already does cleanly (value 7 — don't reimplement). See Decisions.
+
+### 14.3 Dynamic wiki targets — not supported  *(resolved: use JSX)*
+
+`[[{someFilename()}]]` is **not** supported. The target inside `[[…]]` is literal, exactly as a
+markdown link destination is (§14.2) — the wiki-link plugin never evaluates an expression in the
+target position. Keeping `[[…]]` consistent with `[…](…)` is the point (see Decisions). For a
+dynamic target, use JSX once §13 lands: `<WikiLink target={someFilename()} />`.
+
+### 14.4 Content is code (content-trust note)
+
+`{…}` is arbitrary JavaScript executed in the **app's** principal — this is already true for all
+MDX and adds **no** new authority (`core_concepts.md §5`). It does reinforce that MDX content *is
+code*: an app that renders **low-trust** MDX (a multi-writer space, a remote document — content
+trust, `core_concepts.md §8`) is executing attacker-influenceable code in its own principal and
+must treat the source accordingly. This is a property of MDX in general, not of these features.
+
+---
 
 ## Decisions & rejected alternatives
 
@@ -324,21 +604,86 @@ syntax surface changes only on a deliberate bump of those pins.
   a second parser for `.md` — it would fork the toolchain, break byte-identity between the two
   extensions, and surprise authors whose `.md` used a component. The cost is that `.md` inherits
   the MDX deviations (§8); the benefit is one grammar, one compiler, one cached output.
-- **GFM on, everything else off.** `remark-gfm` is included because tables/task-lists/strikethrough
-  are table stakes for content apps; rehype/recma plugins (slugs, highlighting, raw-HTML) are left
-  to apps/forks so the kernel toolchain stays minimal and apps aren't forced into one highlighter
-  or heading-anchor style. *Rejected:* baking slugs/highlighting into the shared chain.
-- **Frontmatter is metadata, not props/exports.** It is parsed out before the compiler sees it and
-  exposed through the SDK metadata hooks, keeping the compiled module free of frontmatter coupling
-  and letting the content-collection machinery own it. *Rejected:* auto-`export const frontmatter`
-  / auto-props injection.
-- **`<More />` as the excerpt marker.** Kept for gray-matter compatibility with existing content.
-  *Rejected:* a frontmatter `excerpt:` field only — the inline marker lets the summary be authored
-  in place. (Documented honesty note in §3.1: the prefix is moved, not copied.)
+- **GFM on; slugs/highlighting/raw-HTML stay off.** `remark-gfm` is included because
+  tables/task-lists/strikethrough are table stakes; rehype/recma plugins (slugs, highlighting,
+  raw-HTML) are left to apps/forks so the kernel toolchain stays minimal and apps aren't forced
+  into one highlighter or heading-anchor style. *Rejected:* baking slugs/highlighting into the
+  shared chain. (Admonitions and wiki-links are the deliberate v1 *exceptions* to "everything else
+  off" — see below.)
+- **Frontmatter is metadata, not props/exports.** Parsed out before the compiler sees it and
+  exposed through the SDK metadata hooks. *Rejected:* auto-`export const frontmatter` / auto-props
+  injection.
+- **`<More />` as the excerpt marker.** Kept for gray-matter compatibility. *Rejected:* a
+  frontmatter `excerpt:` field only. (Honesty note in §3.1: the prefix is moved, not copied.)
+- **New syntax (admonitions, wiki-links) compiles to overridable components backed by phantom
+  defaults — not to intrinsic HTML.** Chosen for **late binding**: an app overrides `<WikiLink>`
+  / `<Admonition>` once and re-behaviors every occurrence in every content file (§11.1). Value 3
+  ("plain markdown just works") is preserved because the SDK's expanded `DEFAULT_MDX_COMPONENTS`
+  is already delivered through the synthesized `boot()` call (BootDefaultsFS), so the
+  missing-reference guard never fires (§11.2). *Rejected:* compiling to intrinsic `<div class>` /
+  `<a href>` — styleable but not re-behaviorable, losing the late-binding win that motivates the
+  whole feature.
+- **New syntax lives in the kernel remark chain — global, like GFM — not in a per-app plugin
+  seam.** *Rejected (for v1):* a per-app rehype/remark layer. It threatens per-file byte-identity,
+  adds a large new seam, and the hackability the platform cares about is already available at the
+  **component** layer (override `<WikiLink>`/`<Admonition>`). This accepts a value-4 tension: the
+  *syntax* is global and not per-app forkable, while the *rendering* is fully per-app forkable via
+  components. GFM sets the precedent for global kernel syntax. The per-app plugin seam is kept as
+  an Open question.
+- **WikiLinks parse in the kernel, resolve at runtime.** The plugin emits a raw-target
+  `<WikiLink>` node; existence/name→path resolution happens in the component against the live
+  metadata index (§13.2). *Rejected:* compile-time resolution against the content index — it makes
+  one file's compiled output depend on other files, breaking per-file caching and the
+  sandbox↔CLI byte-identity invariant.
+- **JSX is the supported dynamic path; markdown link *and* wiki-link destinations stay literal**
+  (§14.2/§14.3). A dynamic URL uses `<a href={fn()}>` and a dynamic wiki target uses
+  `<WikiLink target={fn()} />`; neither `[…]({fn()})` nor `[[{fn()}]]` evaluates. *Signed off
+  2026-07-02* (the `[[{…}]]` half): keeping `[[…]]` literal is what makes it consistent with
+  `[…](…)`. *Rejected:* a transform that evaluates `{…}` inside a link `(…)` or a `[[…]]` target —
+  fragile, ambiguous (URLs/paths contain braces), and a reimplementation of what JSX already does
+  (value 7). Don't relitigate.
+- **Wiki-link targets are relative or absolute *paths* only — no implicit search-path / bare-name
+  resolution** (§13.1/§13.3). *Signed off 2026-07-02.* A bare `[[name.mdx]]` is a relative path in
+  the current directory, not a vault-wide name lookup. Chosen because a search-path resolver
+  (Obsidian-style) makes a link's target **change surprisingly when unrelated files are added** to
+  the collection — a silent content-correctness hazard; a path names exactly one location and is
+  deterministic from the link text alone. This also **retires the former "bare-filename ambiguity
+  rule" open question** — with paths there is no ambiguity to resolve. *Rejected:* Obsidian-style
+  unique-basename / nearest-by-path / first-match resolution. *Deferred (separate initiative, not
+  this spec):* referring to a document by a short human name is handled by a **future opt-in
+  component that resolves a `title` frontmatter attribute** to a path — explicit, distinct from the
+  link syntax.
+- **The admonition transform is an in-house plugin, not a third-party package** (§12.2).
+  *Signed off 2026-07-02.* Chosen because: (1) **byte-identity is ours to keep** — a third-party
+  plugin can change its output on any version bump, silently breaking the cached↔live byte-identity
+  the whole shared-package design rests on; an in-house transform is pinned by our own source. (2)
+  We emit our **own `<Admonition>` component** directly (§12.3); an existing plugin
+  (`remark-github-blockquote-alert`) emits its own HTML/class shape, so we'd be post-processing it
+  anyway. (3) The transform is tiny (match `[!TYPE]`, rewrite the blockquote) and needs no ESM-only
+  dependency, keeping the kernel toolchain minimal. *Rejected:* `remark-github-blockquote-alert` /
+  any third-party admonition plugin. Don't relitigate.
+- **`boot()` merges `mdxComponents` over the defaults** (§11.3), replacing today's replace
+  semantics. Chosen so an app overrides one component without re-listing the rest; the
+  function-form remains the full-replace escape hatch. *Rejected:* keeping replace semantics and
+  requiring every app to spread `...DEFAULT_MDX_COMPONENTS` (the current Grove workaround).
+  *(Signed off 2026-07-02 — the behavior change is approved, not merely recommended; R3-151b
+  builds it. Don't relitigate.)*
+- **No transpiler-level / post-boot imperative component registration.** The originally-explored
+  "dynamic runtime component registration" reduces to the existing provider model: `boot()` for
+  global defaults, nested `<MDXProvider>` + `React.lazy` for per-subtree/lazy packs (§11.4).
+  *Rejected:* a new imperative `registerMdxComponents()` API — it adds a `_missingMdxReference`
+  race (a component rendering before an async registration lands) for no capability the provider
+  doesn't already give. (Grove's "load author components at boot from a frontmatter tag" is an
+  app-level use of `boot({ mdxComponents })`, not a platform feature.)
 
 ## Open questions
 
-- Should the CommonMark `<https://…>` angle-bracket autolink be made to work under MDX (it is
-  currently unreliable because `<` starts JSX), or is the GFM bare-URL form (§5) sufficient?
-- Do we want an opt-in rehype layer (slugs + highlighting) as a shared, forkable default, or
-  keep it strictly app-owned (current §7 stance)?
+- **Admonition default styling.** How much default CSS/icons ship in the SDK vs. are left to apps
+  (§12.3). *(The plugin-choice half is settled — in-house, see Decisions.)*
+- **The per-app plugin seam.** Keep new syntax kernel-only (current stance), or design an opt-in
+  per-app rehype/remark layer that preserves per-file byte-identity? (Supersedes the prior
+  "opt-in rehype layer" question.)
+- **Roadmap items — assigned.** §11 → **R3-151** (foundational), §12 → **R3-152**, §13 → **R3-153**,
+  §14 → **R3-154** (`docs/ENGINEERING_ROADMAP3.md`). §12/§13 depend on §11; §14.3 depends on §13.
+- **Angle-bracket autolink.** Should the CommonMark `<https://…>` autolink be made to work under
+  MDX (currently unreliable because `<` starts JSX), or is the GFM bare-URL form (§5) sufficient?
