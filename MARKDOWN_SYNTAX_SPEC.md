@@ -530,16 +530,22 @@ v1 therefore **splits parsing from resolution**:
 - **SDK component (runtime):** the default `<WikiLink>` computes the target path (relative→current
   dir, or absolute) and checks **existence** against the live metadata index (`filesMetadata`,
   keyed by absolute `/app/…` paths) for the resolved / broken / self state, routing resolved links
-  through the existing `<Link>` in-app router. It learns the **current file** from the routing
-  context, reusing the machinery that already exists: the default `DEFAULT_ROUTING_SPEC` routes
-  `/files/*` to `FileRouter`, which renders `underAppRoot(pathParameters['*'])` — so the current
-  file's `/app/…` path (and thus its directory, for a relative target, and the self-link check) is
-  `underAppRoot(navigationState.pathParameters['*'])`, with no per-node compile-time help. This is
-  the pattern Grove's `WikiLink.tsx` already prototypes — and notably Grove already resolves only
-  path-based hrefs and never does a name search, so the path-only rule (§13.3) matches the proven
-  prototype — §10 anchors it. An app with a bespoke route→file mapping (one whose content routes
-  are *not* the default `/files/*`) overrides `<WikiLink>` (§11) for precise resolution; the
-  default degrades gracefully (a relative target with no derivable current file routes optimistically).
+  through the existing `<Link>` in-app router. It learns the **current file** — the file the link is
+  *authored in* — from the machinery that already exists: every MDX file is rendered through
+  `<Include>` (`FileRouter` renders even the top-level file that way), and `Include` /
+  `RenderExportedComponent` publish the rendered module's `EvaluationContext` to their subtree via
+  `RenderExportedComponentContext`. The component reads the **nearest** such context, whose
+  `evaluation.module.filepath` is the authoring file's own `/app/…` path — so a relative target
+  resolves against *that* file's directory and the self-link check compares against it, with no
+  per-node compile-time help. This matters for composition: if `MainPage.mdx` `<Include>`s
+  `nav/NavSection.mdx` and the fragment contains `[[../demos.mdx]]`, the nearest context is
+  `NavSection.mdx`, so the target resolves to `demos.mdx` **relative to the fragment**, not to the
+  top-level page in the URL — because `RenderExportedComponentContext` nests with each `<Include>`.
+  This is the pattern Grove's `WikiLink.tsx` already prototypes — and notably Grove already resolves
+  only path-based hrefs and never does a name search, so the path-only rule (§13.3) matches the
+  proven prototype — §10 anchors it. An app that renders MDX **without** `<Include>` overrides
+  `<WikiLink>` (§11) for precise resolution; the default degrades gracefully (a relative target with
+  no ambient render context routes optimistically).
 
 ### 13.3 Resolution rules (default `<WikiLink>`)
 

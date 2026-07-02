@@ -8,8 +8,8 @@ import type { Plugin } from 'unified';
 // resolution was rejected — §13.2 Decisions). Existence and the `resolved | broken
 // | self` state — including resolving a RELATIVE target against the current file's
 // directory — are RENDER concerns handled by the SDK's default `<WikiLink>`, which
-// derives the current file from the routing context (the default `/files/*` →
-// `FileRouter` bridge, `underAppRoot(pathParameters['*'])`), §13.2/§13.3.
+// learns the authoring file from the ambient `<Include>` render context
+// (`RenderExportedComponentContext` → `evaluation.module.filepath`), §13.2/§13.3.
 //
 // The transform hand-walks the mdast tree (no `unist-util-visit`, no ESM-only dep)
 // and rewrites `[[…]]` runs inside `text` nodes into inline `mdxJsxTextElement`
