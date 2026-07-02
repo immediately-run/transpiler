@@ -26,12 +26,16 @@ test('§13: `[[target]]` → <WikiLink target="…"> with the raw target, no lab
   assert.equal(attr(links[0], 'label'), null);
 });
 
-test('§13.2: the byte-local `from` attribute carries the compiling file path', async () => {
-  // The SDK default <WikiLink> needs the authoring file's path to resolve a
-  // relative target against the current dir (route path ≠ FS path). It is
-  // byte-local — depends only on THIS file's path, never on other files.
-  const out = await compileMdx(`[[rel.mdx]]`, '/app/content/sub/here.mdx');
-  assert.equal(attr(wikiLinks(out)[0], 'from'), '/app/content/sub/here.mdx');
+test('§13.2: the kernel carries only target/label — no resolution, no file path', async () => {
+  // Resolution (incl. the current-file base) is the SDK component's job, derived
+  // from routing context — the kernel emits only the raw target/label.
+  const a = await compileMdx(`[[rel.mdx]]`, '/app/content/sub/here.mdx');
+  const b = await compileMdx(`[[rel.mdx]]`, '/app/other/place.mdx');
+  const fragA = wikiLinks(a)[0];
+  assert.equal(attr(fragA, 'target'), 'rel.mdx');
+  assert.equal(attr(fragA, 'from'), null); // no file-path attribute is emitted
+  // The emitted <WikiLink> is identical regardless of the compiling path.
+  assert.equal(wikiLinks(a)[0], wikiLinks(b)[0]);
 });
 
 test('§13: `[[label|target]]` carries label (first) and target (second) verbatim', async () => {

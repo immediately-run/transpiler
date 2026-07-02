@@ -523,23 +523,23 @@ compile concern.
 v1 therefore **splits parsing from resolution**:
 
 - **Kernel (compile time):** a small in-house remark plugin (as §12.2) turns `[[target]]` and
-  `[[label|target]]` into a `<WikiLink target="…" label="…" from="…">` node, carrying the **raw**
-  target and label verbatim. It resolves **nothing** — keeping the plugin trivial and the output
-  obviously byte-local (§10 Must-establish). The `from` attribute is the **compiling file's own
-  path** (the VFile path `compileMdx` already holds); it is byte-local (it depends only on *this*
-  file's path, never on which other files exist) and exists because the SDK has **no generic
-  route→FS-path bridge** at render — `navigationState.sandboxPath` is an app-owned route path, not
-  this file's filesystem path (the app-specific mapping is exactly what Grove's `sandboxPathToKey`
-  supplies). Without `from`, a generic default could resolve only *absolute* targets. It is not a
-  resolution: `target`/`label` stay raw, and `from` is the current file, not the target.
-- **SDK component (runtime):** the default `<WikiLink>` computes the target path — a **relative**
-  target against `dirname(from)`, an **absolute** target verbatim — and checks **existence**
-  against the live metadata index (`useMetadataQuery`, keyed by absolute `/app/…` paths) for the
-  resolved / broken / self state (self ⇔ the resolved path equals `from`), routing resolved links
-  through the existing `<Link>` in-app router. This is the pattern Grove's `WikiLink.tsx` already
-  prototypes — and notably Grove already resolves only path-based hrefs and never does a name
-  search, so the path-only rule (§13.3) matches the proven prototype — §10 anchors it. An app that
-  owns a bespoke route→file mapping overrides `<WikiLink>` (§11) rather than relying on `from`.
+  `[[label|target]]` into a `<WikiLink target="…" label="…">` node, carrying the **raw** target
+  and label verbatim. It resolves **nothing** — keeping the plugin trivial and the output
+  obviously byte-local (§10 Must-establish): the emitted node depends only on the `[[…]]` bytes,
+  not on the compiling file's path or on which other files exist.
+- **SDK component (runtime):** the default `<WikiLink>` computes the target path (relative→current
+  dir, or absolute) and checks **existence** against the live metadata index (`filesMetadata`,
+  keyed by absolute `/app/…` paths) for the resolved / broken / self state, routing resolved links
+  through the existing `<Link>` in-app router. It learns the **current file** from the routing
+  context, reusing the machinery that already exists: the default `DEFAULT_ROUTING_SPEC` routes
+  `/files/*` to `FileRouter`, which renders `underAppRoot(pathParameters['*'])` — so the current
+  file's `/app/…` path (and thus its directory, for a relative target, and the self-link check) is
+  `underAppRoot(navigationState.pathParameters['*'])`, with no per-node compile-time help. This is
+  the pattern Grove's `WikiLink.tsx` already prototypes — and notably Grove already resolves only
+  path-based hrefs and never does a name search, so the path-only rule (§13.3) matches the proven
+  prototype — §10 anchors it. An app with a bespoke route→file mapping (one whose content routes
+  are *not* the default `/files/*`) overrides `<WikiLink>` (§11) for precise resolution; the
+  default degrades gracefully (a relative target with no derivable current file routes optimistically).
 
 ### 13.3 Resolution rules (default `<WikiLink>`)
 

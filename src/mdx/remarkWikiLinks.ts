@@ -5,8 +5,11 @@ import type { Plugin } from 'unified';
 // loaded after remark-gfm. It carries the RAW target and label **verbatim** and
 // resolves NOTHING against other files — so a file's compiled output depends only
 // on its own bytes (the load-bearing byte-identity invariant; compile-time
-// resolution was rejected — §13.2 Decisions). Existence/`resolved | broken | self`
-// state is a RENDER concern handled by the SDK's default `<WikiLink>` (§13.3).
+// resolution was rejected — §13.2 Decisions). Existence and the `resolved | broken
+// | self` state — including resolving a RELATIVE target against the current file's
+// directory — are RENDER concerns handled by the SDK's default `<WikiLink>`, which
+// derives the current file from the routing context (the default `/files/*` →
+// `FileRouter` bridge, `underAppRoot(pathParameters['*'])`), §13.2/§13.3.
 //
 // The transform hand-walks the mdast tree (no `unist-util-visit`, no ESM-only dep)
 // and rewrites `[[…]]` runs inside `text` nodes into inline `mdxJsxTextElement`
@@ -38,17 +41,10 @@ interface MdNode {
  * left untouched. Format is `[[label|target]]` (label first, target second — a
  * deliberate departure from Obsidian, §13.1); `[[target]]` has no explicit label
  * (the component derives a basename label). Label/target are trimmed of the
- * whitespace an author leaves around the `|`.
- *
- * `from` is the compiling file's own absolute path. It is emitted as a byte-local
- * attribute (it depends only on THIS file's path, never on which other files
- * exist — so the byte-identity invariant holds) so the SDK's default `<WikiLink>`
- * can resolve a RELATIVE target against the current directory and detect a
- * self-link at render — the SDK has no other generic route→FS-path bridge
- * (`navigationState.sandboxPath` is an app-owned route path, not this file's path).
- * The kernel still resolves NOTHING itself: `target`/`label` are carried verbatim.
+ * whitespace an author leaves around the `|`. The kernel resolves NOTHING:
+ * `target`/`label` are carried verbatim; the component resolves at render.
  */
-function toWikiLink(inner: string, from: string): MdNode | null {
+function toWikiLink(inner: string): MdNode | null {
   const pipe = inner.indexOf('|');
   let target: string;
   let label: string | undefined;
@@ -66,9 +62,6 @@ function toWikiLink(inner: string, from: string): MdNode | null {
   if (label) {
     attributes.push({ type: 'mdxJsxAttribute', name: 'label', value: label });
   }
-  if (from) {
-    attributes.push({ type: 'mdxJsxAttribute', name: 'from', value: from });
-  }
   return {
     type: 'mdxJsxTextElement', // inline (phrasing) — a wiki-link sits in a paragraph
     name: 'WikiLink',
@@ -82,7 +75,7 @@ function toWikiLink(inner: string, from: string): MdNode | null {
  * or `null` when the node has no usable wiki-link (leave it byte-for-byte as is —
  * critical for the byte-identity of ordinary content).
  */
-function splitTextNode(node: MdNode, from: string): MdNode[] | null {
+function splitTextNode(node: MdNode): MdNode[] | null {
   const value = node.value;
   if (typeof value !== 'string' || value.indexOf('[[') === -1) return null;
 
@@ -92,7 +85,7 @@ function splitTextNode(node: MdNode, from: string): MdNode[] | null {
   WIKILINK.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = WIKILINK.exec(value)) !== null) {
-    const wl = toWikiLink(match[1], from);
+    const wl = toWikiLink(match[1]);
     if (!wl) continue; // empty target → keep the literal `[[…]]` in the trailing text
     if (match.index > lastIndex) {
       out.push({ type: 'text', value: value.slice(lastIndex, match.index) });
@@ -109,33 +102,30 @@ function splitTextNode(node: MdNode, from: string): MdNode[] | null {
 }
 
 /** Depth-first walk, splitting `[[…]]` out of `text` nodes in place. */
-function walk(node: MdNode, from: string): void {
+function walk(node: MdNode): void {
   const children = node.children;
   if (!Array.isArray(children)) return;
   for (let i = 0; i < children.length; i++) {
     const child = children[i];
     if (child.type === 'text') {
-      const replacement = splitTextNode(child, from);
+      const replacement = splitTextNode(child);
       if (replacement) {
         children.splice(i, 1, ...replacement);
         i += replacement.length - 1; // skip the freshly-inserted nodes
       }
       continue;
     }
-    walk(child, from);
+    walk(child);
   }
 }
 
 /**
  * Remark plugin factory. Added to `compile.ts`'s `remarkPlugins` after remark-gfm
  * and the admonition plugin; runs on the mdast tree so table cells are already
- * parsed into `text` nodes it can walk. The transformer's second argument is the
- * VFile — its `path` is the compiling file's own path (`compileMdx` passes it as
- * `{ path, value }`), emitted verbatim as each wiki-link's byte-local `from`.
+ * parsed into `text` nodes it can walk.
  */
-const remarkWikiLinks: Plugin<[], MdNode> = () => (tree, file) => {
-  const from = typeof file?.path === 'string' ? file.path : '';
-  walk(tree as MdNode, from);
+const remarkWikiLinks: Plugin<[], MdNode> = () => (tree) => {
+  walk(tree as MdNode);
 };
 
 export default remarkWikiLinks;
