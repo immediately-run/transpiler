@@ -10,10 +10,11 @@
 > the in-house remark plugin it describes shipped in this package (R3-152,
 > `src/mdx/remarkAdmonitions.ts`). §13 (wiki-links) is `reference` too — the kernel
 > `[[…]]` plugin shipped here (R3-153, `src/mdx/remarkWikiLinks.ts`) and the default
-> resolving `<WikiLink>` shipped in the SDK. §14 (ESM-in-links) remains `proposal` —
-> the **v1 support target**, not yet built, owned by roadmap item
-> **R3-154** (`docs/ENGINEERING_ROADMAP3.md`; §11/R3-151 was the
-> foundation the rest depend on). Every §-block carries a *(reference)* or
+> resolving `<WikiLink>` shipped in the SDK. §14 (ESM-in-links) is `reference` too —
+> its supported/rejected forms are confirmed and locked by a golden test (R3-154);
+> no compiler change was needed (link destinations stay literal; dynamic URLs/targets
+> use JSX). With §11–§14 all landed, the whole v1 MDX support target is now
+> `reference`. Every §-block carries a *(reference)* or
 > *(proposal — …)* label; **never read a proposal block as describing shipped
 > behavior.** When a proposal lands, its block flips to *(reference)* in the same edit
 > that ships it.
@@ -581,7 +582,7 @@ always present in the defaults, a plain repo renders wiki-links with no app coop
 
 ---
 
-## 14. ESM expressions in link labels, URLs, and wiki targets  *(mixed — owned by R3-154)*
+## 14. ESM expressions in link labels, URLs, and wiki targets  *(reference — confirmed + locked by R3-154, `test/esmLinks.test.mjs`)*
 
 The four requested forms split three ways by feasibility (all verified against the real compiler —
 §10):
@@ -593,7 +594,7 @@ The four requested forms split three ways by feasibility (all verified against t
 phrasing content and MDX evaluates `{…}` there. Documented as supported; needs only a test to
 lock it.
 
-### 14.2 URLs — use JSX, not markdown link syntax  *(proposal — resolved: JSX)*
+### 14.2 URLs — use JSX, not markdown link syntax  *(reference — resolved: JSX)*
 
 `[Click here]({dynamicUrl()})` does **not** evaluate — the CommonMark link *destination* is a
 string grammar, so `{dynamicUrl()}` is treated as literal URL text and URL-encoded
@@ -608,12 +609,15 @@ v1 does **not** add expression evaluation inside markdown link destinations: it 
 fragile custom transform, is ambiguous (URLs legitimately contain `{`/`}`), and reinvents what
 `<a href={…}>` already does cleanly (value 7 — don't reimplement). See Decisions.
 
-### 14.3 Dynamic wiki targets — not supported  *(resolved: use JSX)*
+### 14.3 Dynamic wiki targets — not supported  *(reference — resolved: use JSX)*
 
-`[[{someFilename()}]]` is **not** supported. The target inside `[[…]]` is literal, exactly as a
-markdown link destination is (§14.2) — the wiki-link plugin never evaluates an expression in the
-target position. Keeping `[[…]]` consistent with `[…](…)` is the point (see Decisions). For a
-dynamic target, use JSX with §13's component directly: `<WikiLink target={someFilename()} />`.
+`[[{someFilename()}]]` is **not** supported: it does **not** produce a `<WikiLink>`. The wiki-link
+plugin (§13.2) only rewrites `[[…]]` runs that live inside a single `text` node, and an MDX
+`{…}` expression splits the paragraph into `text "[["` · the expression · `text "]]"` — so the
+plugin never matches, and the brackets render literally around the (ordinary MDX) expression. The
+plugin never evaluates anything in the target position; keeping `[[…]]` consistent with `[…](…)`
+(where a `{…}` destination is likewise not a dynamic URL, §14.2) is the point (see Decisions). For
+a dynamic target, use JSX with §13's component directly: `<WikiLink target={someFilename()} />`.
 
 ### 14.4 Content is code (content-trust note)
 
