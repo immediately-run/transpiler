@@ -70,5 +70,14 @@
       "react/jsx-runtime",
       "/node_modules/__csb_bust/refresh-helper.js"
     ]
+  },
+  {
+    "id": "esm-links-mdx",
+    "path": "/app/content/esm-links.mdx",
+    "deps": [
+      "@immediately-run/sdk/MDXProvider",
+      "react/jsx-runtime",
+      "/node_modules/__csb_bust/refresh-helper.js"
+    ]
   }
 ]
