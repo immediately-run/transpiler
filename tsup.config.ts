@@ -7,8 +7,16 @@ import { defineConfig } from 'tsup';
 // versioned exactly (the version IS the toolchain stamp, §4.4), and must resolve
 // to the consumer's installed copy so the produced bytes match.
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // `src/index.ts` is the package root both the CLI and the sandbox iframe consume.
+  // `src/babel/worker-api.ts` (→ `dist/babel/worker-api.js`) is the narrow
+  // Babel-only surface the same-origin Babel worker bundles (R3-149) — a separate
+  // entry so the worker never drags in the root's `compileMdx` / unified tree.
+  // `splitting: false` keeps each entry a self-contained bundle, so adding the
+  // second entry leaves `dist/index.js` AND `dist/index.cjs` byte-identical (the
+  // PRETRANSPILED §4.4 contract, verified) instead of hoisting shared code into a chunk.
+  entry: ['src/index.ts', 'src/babel/worker-api.ts'],
   format: ['esm', 'cjs'],
+  splitting: false,
   dts: true,
   sourcemap: true,
   clean: true,
