@@ -25,6 +25,11 @@ jobs:
       # node --test. The parity gate (test/golden/) is the whole point of this
       # package: a drifted chain (a bumped @babel/standalone or plugin) fails here.
       - run: npm test
+      # Build the prebuilt classic Babel worker (R3-149) and prove it answers a
+      # `transform` request over the MessagePort transport. Publish ships this
+      # `worker/` dir (prepublishOnly builds it); this gate is why a broken worker
+      # never publishes. Parcel is only exercised here, not in the golden run.
+      - run: npm run test:worker
       - run: npm run build
 
       # Tag the release (guarded): a tag only when v<version> doesn't already exist.
