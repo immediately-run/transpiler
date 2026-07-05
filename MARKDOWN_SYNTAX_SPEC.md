@@ -1,6 +1,6 @@
 # immediately.run Markdown / MDX syntax — the v1 authoring target
 
-**Status:** draft — the v1 MDX support target (built surface + v1 proposals) · **Updated:** 2026-07-02
+**Status:** draft — the v1 MDX support target (built surface + v1 proposals) · **Updated:** 2026-07-05
 
 > **This document is now two things at once.** §1–§9 are `reference` — hand-mirrored
 > from the shipped compile chain (`src/mdx/`), describing what the code compiles
@@ -13,8 +13,10 @@
 > resolving `<WikiLink>` shipped in the SDK. §14 (ESM-in-links) is `reference` too —
 > its supported/rejected forms are confirmed and locked by a golden test (R3-154);
 > no compiler change was needed (link destinations stay literal; dynamic URLs/targets
-> use JSX). With §11–§14 all landed, the whole v1 MDX support target is now
-> `reference`. Every §-block carries a *(reference)* or
+> use JSX). §11–§14 have all landed and are `reference`. **§15 (heading slugs &
+> autolinks) is a newly reopened `proposal` (2026-07-05)** — it *reverses* the earlier
+> "no heading anchors / slugs, no v1 change planned" call recorded in §7 and Decisions
+> (see that reversal for the rationale). Every §-block carries a *(reference)* or
 > *(proposal — …)* label; **never read a proposal block as describing shipped
 > behavior.** When a proposal lands, its block flips to *(reference)* in the same edit
 > that ships it.
@@ -273,8 +275,12 @@ Use an **expression comment**: `{/* this is a comment */}`. HTML comments (`<!--
 so none of the following happen at compile time *today* — provide them yourself (a component, a
 fork adding a plugin, or app CSS/JS):
 
-- **No heading anchors / slugs** — headings get no `id` and no `#` link. (No `rehype-slug` /
-  `rehype-autolink-headings`.) *No v1 change planned — see the Open questions.*
+- **No heading anchors / slugs** *today* — headings get no `id` and no `#` link on the
+  current built surface. **This is the v1 target now** — see §15 (proposal): a slug `id` on
+  every heading plus an overridable autolink anchor, added as an in-house remark plugin (like
+  §12/§13), **not** via `rehype-slug` / `rehype-autolink-headings`. Called out here so the
+  reference surface stays honest about the current state. *(Reverses the former "no v1 change
+  planned" call — see Decisions.)*
 - **No syntax highlighting** — a fenced code block's info string (` ```ts `) is passed through
   as a `className` on `<code>`, but nothing tokenises it. Bring a highlighter component.
   *No v1 change planned.*
@@ -376,6 +382,10 @@ plugin (§12, §13).
 | The default `<WikiLink>` resolves relative / absolute / bare-name targets at runtime; ambiguous or missing → broken-link state | SDK `WikiLink` unit tests over the three target forms + a missing target |
 | A `\|` inside `[[label\|target]]` survives `remark-gfm`'s table parsing | Plugin-ordering test: `[[a\|b.mdx]]` in and out of a table context |
 | `boot({ mdxComponents })` **merges** the app map over the defaults (override one, keep the rest) | `boot` test: an app that overrides only `WikiLink` still receives the default `a` + `Admonition` |
+| The heading-slug plugin (§15) is byte-identical across the sandbox (browser) and CLI (Node) paths | Golden-output test: `## A heading` compiles to the same bytes (`id` + `<HeadingAnchor>`) under both entry points |
+| A heading's slug depends only on that heading's own text — never on other files or other headings' *content* (the per-file, in-document dedup counter is still byte-local) | Byte-identity test: file A's compiled output is identical whether or not file B exists; a duplicate heading within one file gets a deterministic `-1`/`-2` suffix from that file's own bytes alone |
+| `## H` compiles to `<h2 id="h">` **and** the default `<HeadingAnchor>` is always present (no `_missingMdxReference`) | Plain-repo render test: a code-less repo renders a heading with an `id` and a working `#` anchor with **no** throw |
+| The autolink anchor is overridable per §11 without disturbing the heading's `id` | `boot` test: an app overriding only `HeadingAnchor` still receives every other default; the heading `id` is unchanged |
 
 ---
 
@@ -388,8 +398,9 @@ SDK change to, the provider path that already exists.
 ### 11.1 Components are the platform's late-binding seam
 
 The kernel compiles certain markdown syntax to **components** rather than intrinsic HTML:
-admonitions → `<Admonition>` (§12), wiki-links → `<WikiLink>` (§13), and Markdown links already
-→ the provider's `a` (§6.4). Compiling to a component (resolved at render through the
+admonitions → `<Admonition>` (§12), wiki-links → `<WikiLink>` (§13), Markdown links already
+→ the provider's `a` (§6.4), and — once §15 (proposal) lands — heading autolink anchors →
+`<HeadingAnchor>`. Compiling to a component (resolved at render through the
 MDXProvider) rather than to a fixed `<div class>`/`<a href>` is deliberate: it gives **late
 binding**. A Grove wiki overrides `<WikiLink>` **once** in its `boot()` call and thereby changes
 how *every* link in *every* content file renders — its resolved/broken/self states, its icons,
@@ -629,18 +640,118 @@ must treat the source accordingly. This is a property of MDX in general, not of 
 
 ---
 
+## 15. Heading slugs & autolinks  *(proposal — R3-186; reverses the former "no slugs" call)*
+
+This section **reverses** the earlier decision (§7, Decisions) that heading anchors/slugs stay
+off with no v1 change planned. Heading slugs and autolink anchors are now a v1 target. The design
+follows the exact shape of §12/§13: an **in-house remark plugin** in the kernel chain, emitting an
+**overridable component** backed by a **phantom default** (§11), so it preserves per-file
+byte-identity and the "plain markdown just works" guarantee.
+
+### 15.1 Behavior
+
+Every ATX/Setext heading (`#` … `######`) gains:
+
+- **A slug `id`.** A URL-safe slug is computed from the heading's rendered **text content** (inline
+  markup stripped: `## The **bold** heading` → `the-bold-heading`) and set as the heading's `id`, so
+  `## Getting started` compiles to `<h2 id="getting-started">`. Slugs are lower-cased, spaces→`-`,
+  and non-word characters dropped (a GitHub-compatible slugging, implemented in-house — see §15.2).
+  Within a **single document**, a repeated slug is disambiguated with a numeric suffix
+  (`-1`, `-2`, …) in document order — a per-file counter that stays byte-local (§15.3).
+- **An autolink anchor.** An anchor pointing at `#<slug>` is **prepended** as the heading's first
+  child, so a reader can link directly to the heading. It renders through a default
+  `<HeadingAnchor>` component (§15.4), styled minimally (an `aria`-labeled `#`/link affordance apps
+  typically reveal on hover) — presentation is app-owned, consistent with the "GFM on, presentation
+  app-owned" stance (§5, §12.3).
+
+A heading that already carries an explicit `id` (e.g. authored as JSX, `<h2 id="x">…`) is left
+alone — the plugin never overwrites an author-set `id`, and emits no second anchor for it.
+
+### 15.2 Implementation — an in-house remark plugin
+
+Like the admonition (§12.2) and wiki-link (§13.2) transforms, this is a **small in-house remark
+plugin defined in the transpiler package**, not `rehype-slug` / `rehype-autolink-headings`. Two
+reasons, both matching the §12.2 admonition decision:
+
+1. **Byte-identity is ours to keep.** The cached↔live byte-identity invariant (§10,
+   `MDX_CONTENT_COLLECTIONS_SPEC §1.1`) requires that a heading's compiled bytes never change out
+   from under us. A third-party slugger can change its algorithm on any version bump; an in-house
+   slugger is pinned by our own source. The slug is part of the compiled output (`id` +
+   `#`-anchor), so its stability is load-bearing.
+2. **No new stage, no new ESM-only dep.** `rehypePlugins` is empty (§7) and stays empty — enabling
+   the rehype (hast) stage just for slugs would pull two ESM-only deps and a second tree pass. The
+   in-house plugin runs on the **mdast** the already-loaded `@mdx-js/mdx` provides (a hand-walk, no
+   `unist-util-visit`), rides the existing `loadMdxDeps` load, and adds no dependency — exactly as
+   §12.2 does.
+
+The plugin walks the mdast, computes each heading's slug from its own text content, sets the `id`
+via `data.hProperties.id` on the heading node, and prepends an `mdxJsxTextElement` named
+`HeadingAnchor` (carrying the slug) as the heading's first child. It emits the component form
+§15.4 renders, directly.
+
+### 15.3 Byte-locality (why this is safe for caching)
+
+Slug computation is **byte-local**: a heading's slug is a pure function of that heading's own text.
+The only cross-heading state is the in-document **duplicate-slug counter**, and that depends only on
+the *compiling file's own bytes* (the sequence of headings within it) — never on which **other
+files** exist. So a file's compiled output still depends only on that file's bytes, and the
+sandbox↔CLI / cached↔live byte-identity invariant holds (§10 Must-establish). This is a weaker
+constraint than wiki-links faced (§13.2): slugs need **no** runtime resolution against the metadata
+index at all — the whole feature is compile-time and self-contained per file.
+
+### 15.4 Compile target and default
+
+The heading stays an intrinsic `<h1>`…`<h6>` (already overridable through the provider, §6.4) — it
+just gains an `id` prop. Only the **injected autolink anchor** is a new component: the SDK ships a
+default `<HeadingAnchor>` in `DEFAULT_MDX_COMPONENTS` (§11.2) rendering semantic, accessible markup
+(an `<a href="#slug">` with an accessible label, intentionally minimal styling). Because it is one
+of the always-present phantom defaults, a code-less markdown repo renders heading anchors with
+**zero** app cooperation and the missing-reference guard never fires (§11.2). A Grove-class app
+overrides `<HeadingAnchor>` once (§11.1/§11.3) to change the icon, position, or behavior (e.g.
+copy-permalink-to-clipboard) of *every* heading anchor in *every* content file — the same
+late-binding win that motivated compiling admonitions/wiki-links to components.
+
+> **Honesty note (v1):** the default `<HeadingAnchor>` is structural, not visually rich (no
+> hover-reveal animation, no icon set). Apps that want GitHub-style hover anchors ship CSS targeting
+> its class or override the component. Whether the autolink is on by default for *every* heading or
+> gains an opt-out is carried in Open questions.
+
+### 15.5 Interaction notes
+
+- **Grove `<Toc>` alignment.** Grove currently computes its own heading ids for its in-page TOC
+  (`grove/src/lib/wiki.ts headingId`). Once the kernel emits `id`s, Grove's `<Toc>` should target
+  the **kernel-emitted** ids so its links and the autolink anchors point at the same target;
+  otherwise a TOC link and a heading anchor could disagree. The plugin's slugging is specified
+  (§15.1) precisely so a consumer can reproduce it.
+- **Headings inside `<Include>`d fragments.** Slugs are computed per compiled file, so a heading in
+  an included fragment is slugged in the fragment's own document scope. Two fragments included into
+  one page can therefore emit the same `id`; de-duplication across an assembled page is a **render**
+  concern (as with any component-composed ids), out of scope for the compile-time plugin.
+- **Non-heading `#` text is untouched.** The plugin only rewrites `heading` nodes; a literal `#` in
+  prose or a code span is left alone.
+
 ## Decisions & rejected alternatives
 
 - **`.md` and `.mdx` share one MDX pipeline** (no separate plain-CommonMark mode). *Rejected:*
   a second parser for `.md` — it would fork the toolchain, break byte-identity between the two
   extensions, and surprise authors whose `.md` used a component. The cost is that `.md` inherits
   the MDX deviations (§8); the benefit is one grammar, one compiler, one cached output.
-- **GFM on; slugs/highlighting/raw-HTML stay off.** `remark-gfm` is included because
-  tables/task-lists/strikethrough are table stakes; rehype/recma plugins (slugs, highlighting,
-  raw-HTML) are left to apps/forks so the kernel toolchain stays minimal and apps aren't forced
-  into one highlighter or heading-anchor style. *Rejected:* baking slugs/highlighting into the
-  shared chain. (Admonitions and wiki-links are the deliberate v1 *exceptions* to "everything else
-  off" — see below.)
+- **GFM on; highlighting/raw-HTML stay off. Heading slugs/autolinks are now ON (reversed
+  2026-07-05).** `remark-gfm` is included because tables/task-lists/strikethrough are table stakes.
+  **Heading slugs + autolink anchors were originally left off ("no v1 change planned") and are now a
+  v1 target (§15, R3-186).** *Reversal rationale:* linkable headings are table stakes for the
+  docs/wiki content the platform is being built around (the roadmap-as-Grove-wiki dogfood needs
+  in-page anchors and a TOC that agrees with them), and the original "one highlighter / one anchor
+  style" objection **does not apply** — the anchor compiles to an overridable `<HeadingAnchor>`
+  component (§15.4), so apps still choose the style/behavior, and the slug is a plain `id`. Crucially
+  it is done as an **in-house remark plugin emitting a component**, *not* by enabling `rehype-slug` /
+  `rehype-autolink-headings` — so byte-identity and the minimal toolchain are preserved exactly as
+  for admonitions (§12.2, §15.2). Slug computation is byte-local (§15.3), so per-file caching is
+  untouched. *Still rejected:* baking **syntax highlighting** or **raw-HTML re-parsing** into the
+  shared chain (apps bring those). *Rejected for slugs specifically:* a third-party
+  `rehype-slug`/`rehype-autolink-headings` (version-bump byte-identity risk; enabling the rehype
+  stage) — in-house, like the admonition plugin. Admonitions, wiki-links, and now heading
+  slugs/autolinks are the deliberate v1 *exceptions* to "everything else off."
 - **Frontmatter is metadata, not props/exports.** Parsed out before the compiler sees it and
   exposed through the SDK metadata hooks. *Rejected:* auto-`export const frontmatter` / auto-props
   injection.
@@ -711,10 +822,16 @@ must treat the source accordingly. This is a property of MDX in general, not of 
 
 - **Admonition default styling.** How much default CSS/icons ship in the SDK vs. are left to apps
   (§12.3). *(The plugin-choice half is settled — in-house, see Decisions.)*
+- **HeadingAnchor default styling & always-on scope (§15).** How much default CSS/icon ships with
+  the default `<HeadingAnchor>` vs. is left to apps (parallels the admonition question), and whether
+  the autolink is emitted for **every** heading unconditionally or gains an opt-out (e.g. a
+  frontmatter flag / a min-depth). *(The plugin-choice and slug-vs-component split are settled —
+  in-house remark plugin, `id` on the heading + component anchor, see §15.2/§15.4 and Decisions.)*
 - **The per-app plugin seam.** Keep new syntax kernel-only (current stance), or design an opt-in
   per-app rehype/remark layer that preserves per-file byte-identity? (Supersedes the prior
   "opt-in rehype layer" question.)
 - **Roadmap items — assigned.** §11 → **R3-151** (foundational), §12 → **R3-152**, §13 → **R3-153**,
-  §14 → **R3-154** (`docs/ENGINEERING_ROADMAP3.md`). §12/§13 depend on §11; §14.3 depends on §13.
+  §14 → **R3-154**, §15 → **R3-186** (`docs/roadmap/`). §12/§13 depend on §11; §14.3 depends on §13;
+  §15 depends on §11 (it ships a new phantom default `<HeadingAnchor>`), otherwise independent.
 - **Angle-bracket autolink.** Should the CommonMark `<https://…>` autolink be made to work under
   MDX (currently unreliable because `<` starts JSX), or is the GFM bare-URL form (§5) sufficient?
