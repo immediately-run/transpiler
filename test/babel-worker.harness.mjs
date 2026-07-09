@@ -9,7 +9,7 @@
 //
 // Run via `npm run test:worker` (which builds dist + the worker first). Not named
 // `*.test.mjs` so it stays out of the golden `node --test test/*.test.mjs` run,
-// which must not depend on a Parcel worker build.
+// which must not depend on the esbuild worker build.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
@@ -18,7 +18,12 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { MessageChannel } from 'node:worker_threads';
 
-const WORKER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'worker');
+import { compileMdx } from '../dist/index.js';
+import { CORPUS } from './corpus.mjs';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const WORKER_DIR = resolve(HERE, '..', 'worker');
+const FIXTURES_DIR = join(HERE, 'fixtures');
 const ENTRY = join(WORKER_DIR, 'babel-worker.js');
 const CHANNEL = 'sandpack-babel';
 
@@ -73,7 +78,9 @@ function adapt(port) {
   };
 }
 
-test('prebuilt classic Babel worker compiles TS+JSX and collects deps over the MessagePort', async () => {
+// Spawn the classic worker in the vm shim, complete the handshake, and return a
+// `{ request, close }` pair that speaks the WorkerMessageBus wire protocol.
+function openWorker() {
   assert.ok(
     existsSync(ENTRY),
     `worker bundle missing at ${ENTRY} — run "npm run build:worker" first`,
@@ -105,6 +112,12 @@ test('prebuilt classic Babel worker compiles TS+JSX and collects deps over the M
       parentPort.postMessage({ channel: CHANNEL, id, method, params });
     });
 
+  return { request, close: () => parentPort.close() };
+}
+
+test('prebuilt classic worker compiles TS+JSX and collects deps over the MessagePort', async () => {
+  const { request, close } = openWorker();
+
   const SRC = `import {useState} from 'react';
 export const Counter = (props: {start: number}) => {
   const [n, setN] = useState<number>(props.start);
@@ -126,5 +139,43 @@ export const Counter = (props: {start: number}) => {
   assert.match(code, /createElement|_jsx/, 'JSX was not compiled');
   assert.ok(depsArr.includes('react'), `dep collection failed (got ${JSON.stringify(depsArr)})`);
 
-  parentPort.close();
+  close();
+});
+
+// R3-150: the worker now also answers `mdx-compile`. The whole point of moving the
+// MDX compile into the worker is that the compiled bytes must be IDENTICAL to the
+// in-process `compileMdx` the CLI runs (MDX_CONTENT_COLLECTIONS_SPEC §1.1) — and it
+// must run in a DOM-free worker (the reason it historically compiled in-iframe).
+// The vm shim above provides NO `document`, so a regression to a DOM-using package
+// variant (e.g. decode-named-character-reference's browser build) fails here.
+test('worker `mdx-compile` is byte-identical to in-process compileMdx across the MDX corpus', async () => {
+  const { request, close } = openWorker();
+  const mdxCases = CORPUS.filter((c) => /\.mdx?$/.test(c.file));
+  assert.ok(mdxCases.length >= 3, 'expected several MDX fixtures in the corpus');
+
+  for (const c of mdxCases) {
+    const source = readFileSync(join(FIXTURES_DIR, c.file), 'utf8');
+    const [expected, viaWorker] = await Promise.all([
+      compileMdx(source, c.path),
+      request('mdx-compile', { code: source, path: c.path }),
+    ]);
+    assert.equal(viaWorker, expected, `worker mdx-compile drifted from compileMdx for ${c.id}`);
+  }
+
+  close();
+});
+
+test('worker `mdx-compile` surfaces a positioned error for malformed MDX', async () => {
+  const { request, close } = openWorker();
+  // An unterminated JSX expression — @mdx-js/mdx reports a line/column.
+  await assert.rejects(
+    () => request('mdx-compile', { code: '# ok\n\n<Broken\n', path: '/app/content/bad.mdx' }),
+    (err) => {
+      assert.ok(err instanceof Error);
+      // line/column ride across the transport as own props (serializeError spread).
+      assert.equal(typeof err.line, 'number', 'expected a line number on the error');
+      return true;
+    },
+  );
+  close();
 });

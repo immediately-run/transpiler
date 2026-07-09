@@ -1,6 +1,6 @@
 {
   "name": "@immediately-run/transpiler",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "The single source of truth for immediately.run's per-file transform chain (MDX + Babel + react-refresh), shared byte-for-byte between the browser sandbox bundler and the CLI's pre-transpiled-artifact emitter.",
   "license": "MIT",
   "repository": "github:immediately-run/transpiler",
@@ -21,23 +21,11 @@
     "worker"
   ],
   "sideEffects": false,
-  "targets": {
-    "babelWorker": {
-      "source": "worker-src/babel-worker.ts",
-      "distDir": "worker",
-      "context": "web-worker",
-      "outputFormat": "global",
-      "isLibrary": false,
-      "optimize": true,
-      "sourceMap": false,
-      "includeNodeModules": true
-    }
-  },
   "scripts": {
     "gen:version": "node scripts/gen-version.mjs",
     "prebuild": "node scripts/gen-version.mjs",
     "build": "tsup",
-    "build:worker": "parcel build --target babelWorker --no-scope-hoist --cache-dir .parcel-cache-worker",
+    "build:worker": "node scripts/build-worker.mjs",
     "typecheck": "tsc --noEmit",
     "gen:golden": "node scripts/gen-golden.mjs",
     "test": "npm run build && node --test test/*.test.mjs",
@@ -59,8 +47,8 @@
     "assert": "^2.1.0",
     "buffer": "^6.0.3",
     "crypto-browserify": "^3.12.1",
+    "esbuild": "^0.27.0",
     "events": "^3.3.0",
-    "parcel": "2.14.4",
     "path-browserify": "^1.0.1",
     "process": "^0.11.10",
     "stream-browserify": "^3.0.0",

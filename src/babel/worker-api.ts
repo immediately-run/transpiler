@@ -1,12 +1,19 @@
-// The narrow surface the same-origin Babel worker bundles (R3-149). The worker's
-// only job is to answer `transform` requests with `transformBabel`, so it imports
-// from *this* entry rather than the package root — the root re-exports `compileMdx`
-// (and its dynamic `import('@mdx-js/mdx')`), which the worker never invokes (MDX
-// compiles in-iframe, MDX_CONTENT_COLLECTIONS_SPEC / R3-150). Bundling the root
-// into a classic web-worker would drag the whole unified/mdx tree — including its
-// `development`/`do-not-use-color` conditional exports that Parcel's resolver can't
-// follow — into the worker for no runtime benefit. This entry keeps the worker to
-// the Babel chain it actually serves, and is still the tsup-built `transformBabel`
-// (same version, byte-identical behaviour to the CLI artifacts + the iframe runtime).
+// The surface the same-origin transform worker bundles (R3-149 + R3-150). The
+// worker answers two methods over the MessagePort transport:
+//   - `transform`     -> `transformBabel` (the Babel chain)
+//   - `mdx-compile`   -> `compileMdx`     (the MDX -> JSX program stage)
+// so the worker runs BOTH halves of the `.mdx` chain the sandbox iframe used to
+// run in-process (MDX_CONTENT_COLLECTIONS_SPEC §1.1). The react-refresh wrap
+// stays in-iframe (as for `.tsx`), so it is deliberately NOT exported here.
+//
+// Historically this entry was Babel-ONLY: the worker was Parcel-built, and
+// Parcel's resolver can't follow the `@mdx-js/mdx` / unified conditional-exports
+// tree (`devlop`/`unist`/`decode-named-character-reference`), so MDX compiled
+// in-iframe. R3-150 swaps the worker build to esbuild (`scripts/build-worker.mjs`),
+// which follows that tree fine — so the worker can now own the MDX compile too and
+// the in-iframe `MDXTransformer` becomes a thin RPC. It is still the tsup-built
+// `compileMdx`/`transformBabel` (same package version, byte-identical behaviour to
+// the CLI artifacts + the iframe runtime).
 export { transformBabel } from './transform';
 export type { ITransformData, BabelTransformResult } from './transform';
+export { compileMdx, MdxCompileError } from '../mdx/compile';
