@@ -41,6 +41,13 @@ export { compileMdx, MdxCompileError } from './mdx/compile';
 export { parseFrontmatter } from './mdx/frontmatter';
 export type { FrontmatterParseResult } from './mdx/frontmatter';
 
+// Heading slug / section-id computation (MARKDOWN_SYNTAX_SPEC §15.1, R3-186/R3-211).
+// Exported so a consumer that must reproduce the kernel's heading ids WITHOUT
+// re-compiling — Grove's in-page `<Toc>` (`grove/src/lib/wiki.ts`), or any TOC —
+// derives byte-identical ids from the one shared implementation.
+export { textSlug, sectionId } from './mdx/remarkHeadingAnchors';
+export type { HeadingAnchorOptions } from './mdx/remarkHeadingAnchors';
+
 // Dependency-map facts the CLI needs to compute the lockset input, plus the
 // resolution-completeness guard shared with the sandbox runtime + CLI builder.
 export { computeInputDepMap, assertDependenciesResolved } from './depmap';

@@ -2,6 +2,7 @@ import type { PluggableList } from 'unified';
 
 import { parseFrontmatter } from './frontmatter';
 import remarkAdmonitions from './remarkAdmonitions';
+import remarkHeadingAnchors from './remarkHeadingAnchors';
 import remarkWikiLinks from './remarkWikiLinks';
 
 // The MDX compile half of the `.mdx` chain — moved verbatim from
@@ -65,8 +66,11 @@ export class MdxCompileError extends Error {
  * so callers have a stable error shape.
  */
 export async function compileMdx(code: string, path: string): Promise<string> {
-  const { content } = parseFrontmatter(code);
+  const { data, content } = parseFrontmatter(code);
   const { compile, remarkGfm } = await loadMdxDeps();
+  // §15.1 opt-out (R3-211): `sectionIds: false` forces plain text-slug ids for the
+  // whole file. Byte-local — the flag is part of this file's own frontmatter bytes.
+  const sectionIds = data.sectionIds !== false;
   try {
     const compilerOutput = await compile(
       { path, value: content },
@@ -78,9 +82,15 @@ export async function compileMdx(code: string, path: string): Promise<string> {
         recmaPlugins,
         rehypePlugins,
         // remark-gfm first (so table cells are parsed), then the in-house
-        // transforms: admonitions (§12) and wiki-links (§13). Both are purely
-        // local (no ESM-only dep, no cross-file resolution).
-        remarkPlugins: [[remarkGfm], [remarkAdmonitions], [remarkWikiLinks]],
+        // transforms: admonitions (§12), wiki-links (§13), and heading slugs +
+        // autolink anchors (§15). All purely local (no ESM-only dep, no cross-file
+        // resolution). Heading anchors run last so it slugs the final heading text.
+        remarkPlugins: [
+          [remarkGfm],
+          [remarkAdmonitions],
+          [remarkWikiLinks],
+          [remarkHeadingAnchors, { sectionIds }],
+        ],
       },
     );
     return String(compilerOutput.value);

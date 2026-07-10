@@ -13,10 +13,11 @@
 > resolving `<WikiLink>` shipped in the SDK. §14 (ESM-in-links) is `reference` too —
 > its supported/rejected forms are confirmed and locked by a golden test (R3-154);
 > no compiler change was needed (link destinations stay literal; dynamic URLs/targets
-> use JSX). §11–§14 have all landed and are `reference`. **§15 (heading slugs &
-> autolinks) is a newly reopened `proposal` (2026-07-05)** — it *reverses* the earlier
-> "no heading anchors / slugs, no v1 change planned" call recorded in §7 and Decisions
-> (see that reversal for the rationale). Every §-block carries a *(reference)* or
+> use JSX). §11–§15 have all landed and are `reference`. **§15 (heading slugs &
+> autolinks) SHIPPED 2026-07-10 (R3-186 + R3-211, `src/mdx/remarkHeadingAnchors.ts`
+> + the SDK default `<HeadingAnchor>`)** — it *reversed* the earlier "no heading
+> anchors / slugs, no v1 change planned" call recorded in §7 and Decisions (see that
+> reversal for the rationale), and §15.1 carries the R3-211 section-id scheme. Every §-block carries a *(reference)* or
 > *(proposal — …)* label; **never read a proposal block as describing shipped
 > behavior.** When a proposal lands, its block flips to *(reference)* in the same edit
 > that ships it.
@@ -275,10 +276,11 @@ Use an **expression comment**: `{/* this is a comment */}`. HTML comments (`<!--
 so none of the following happen at compile time *today* — provide them yourself (a component, a
 fork adding a plugin, or app CSS/JS):
 
-- **No heading anchors / slugs** *today* — headings get no `id` and no `#` link on the
-  current built surface. **This is the v1 target now** — see §15 (proposal): a slug `id` on
-  every heading plus an overridable autolink anchor, added as an in-house remark plugin (like
-  §12/§13), **not** via `rehype-slug` / `rehype-autolink-headings`. Called out here so the
+- **Heading anchors / slugs** — **SHIPPED (§15, R3-186 + R3-211)**: every heading gets an `id`
+  (a GitHub text slug, or a `sec-…` section id for a numbered heading) plus an overridable autolink
+  `<HeadingAnchor>`, added as an in-house remark plugin (like §12/§13), **not** via `rehype-slug` /
+  `rehype-autolink-headings`. (This list otherwise enumerates what the kernel does *not* do; the
+  §15 reversal moved heading anchors out of it.) Called out here so the
   reference surface stays honest about the current state. *(Reverses the former "no v1 change
   planned" call — see Decisions.)*
 - **No syntax highlighting** — a fenced code block's info string (` ```ts `) is passed through
@@ -399,8 +401,8 @@ SDK change to, the provider path that already exists.
 
 The kernel compiles certain markdown syntax to **components** rather than intrinsic HTML:
 admonitions → `<Admonition>` (§12), wiki-links → `<WikiLink>` (§13), Markdown links already
-→ the provider's `a` (§6.4), and — once §15 (proposal) lands — heading autolink anchors →
-`<HeadingAnchor>`. Compiling to a component (resolved at render through the
+→ the provider's `a` (§6.4), and heading autolink anchors →
+`<HeadingAnchor>` (§15). Compiling to a component (resolved at render through the
 MDXProvider) rather than to a fixed `<div class>`/`<a href>` is deliberate: it gives **late
 binding**. A Grove wiki overrides `<WikiLink>` **once** in its `boot()` call and thereby changes
 how *every* link in *every* content file renders — its resolved/broken/self states, its icons,
@@ -640,10 +642,11 @@ must treat the source accordingly. This is a property of MDX in general, not of 
 
 ---
 
-## 15. Heading slugs & autolinks  *(proposal — R3-186; reverses the former "no slugs" call)*
+## 15. Heading slugs & autolinks  *(reference — R3-186 + R3-211, shipped 2026-07-10)*
 
-This section **reverses** the earlier decision (§7, Decisions) that heading anchors/slugs stay
-off with no v1 change planned. Heading slugs and autolink anchors are now a v1 target. The design
+This section **reversed** the earlier decision (§7, Decisions) that heading anchors/slugs stay
+off with no v1 change planned. Heading slugs and autolink anchors are a v1 feature, shipped as
+`src/mdx/remarkHeadingAnchors.ts` + the SDK default `<HeadingAnchor>`. The design
 follows the exact shape of §12/§13: an **in-house remark plugin** in the kernel chain, emitting an
 **overridable component** backed by a **phantom default** (§11), so it preserves per-file
 byte-identity and the "plain markdown just works" guarantee.
@@ -652,12 +655,29 @@ byte-identity and the "plain markdown just works" guarantee.
 
 Every ATX/Setext heading (`#` … `######`) gains:
 
-- **A slug `id`.** A URL-safe slug is computed from the heading's rendered **text content** (inline
-  markup stripped: `## The **bold** heading` → `the-bold-heading`) and set as the heading's `id`, so
-  `## Getting started` compiles to `<h2 id="getting-started">`. Slugs are lower-cased, spaces→`-`,
-  and non-word characters dropped (a GitHub-compatible slugging, implemented in-house — see §15.2).
-  Within a **single document**, a repeated slug is disambiguated with a numeric suffix
-  (`-1`, `-2`, …) in document order — a per-file counter that stays byte-local (§15.3).
+- **An `id`.** Set as the heading's `id` via `data.hProperties.id`, so `## Getting started`
+  compiles to `<h2 id="getting-started">`. Two schemes, chosen per heading:
+  - **Prose heading** — a URL-safe **text slug** from the heading's rendered text content (inline
+    markup stripped: `## The **bold** heading` → `the-bold-heading`): lower-cased, spaces→`-`,
+    non-word characters dropped (a GitHub-compatible slugging, in-house — §15.2). Note GitHub drops
+    a `.` entirely rather than hyphenating it (`8.9 X` → `89-x`).
+  - **Numbered heading (R3-211).** When the heading's **leading token** `T` is a section number,
+    the `id` **is the prose-independent section id** — the stable citation target, the agent-first
+    choice (an agent computes `#sec-8-9` from a `§8.9` citation with zero lookup). `T` is the run of
+    alphanumerics-and-dots before the first space/`—`/`:`; it is **section-like iff** its first
+    dotted component contains a digit **or** `T` is an appendix form `^[A-Za-z]\.`, and
+    `sectionId = "sec-" + T.toLowerCase().replace(/\./g,"-")`. So `8→sec-8`, `8.9→sec-8-9`,
+    `3.2.1→sec-3-2-1`, `7A→sec-7a` (**distinct from** `7→sec-7`), `1a→sec-1a`, `A.0→sec-a-0`; a prose
+    heading (`## Decisions …`) gets a text slug. The GitHub text slug is demoted to a **`data-slug`**
+    attribute (a fallback hook). R3-186's autolink `<HeadingAnchor>` targets the **heading's own
+    `id`**, so `#sec-8-9` is both the human permalink and the agent citation target. Grammar verified
+    **collision-free** across the real spec corpus (56 files / 1334 headings / 1043 section-like / 0
+    collisions, incl. the `7`/`7A` and `3.2`/`3.2.1` pairs a naive grammar would merge).
+  - **Opt-out.** A `sectionIds: false` **frontmatter** flag falls the whole file back to plain
+    text-slug ids (no `sec-`/`data-slug`); byte-local (frontmatter is part of the file's bytes);
+    default **on**.
+  - Within a **single document**, a repeated id is disambiguated with a numeric suffix
+    (`-1`, `-2`, …) in document order — a per-file counter that stays byte-local (§15.3).
 - **An autolink anchor.** An anchor pointing at `#<slug>` is **prepended** as the heading's first
   child, so a reader can link directly to the heading. It renders through a default
   `<HeadingAnchor>` component (§15.4), styled minimally (an `aria`-labeled `#`/link affordance apps
@@ -713,8 +733,9 @@ late-binding win that motivated compiling admonitions/wiki-links to components.
 
 > **Honesty note (v1):** the default `<HeadingAnchor>` is structural, not visually rich (no
 > hover-reveal animation, no icon set). Apps that want GitHub-style hover anchors ship CSS targeting
-> its class or override the component. Whether the autolink is on by default for *every* heading or
-> gains an opt-out is carried in Open questions.
+> its `ir-heading-anchor` class or override the component. The autolink is emitted for **every**
+> heading unconditionally; the `sectionIds: false` frontmatter flag (§15.1) is the file-level
+> opt-out for the section-id scheme (not for the anchor itself).
 
 ### 15.5 Interaction notes
 
@@ -736,10 +757,11 @@ late-binding win that motivated compiling admonitions/wiki-links to components.
   a second parser for `.md` — it would fork the toolchain, break byte-identity between the two
   extensions, and surprise authors whose `.md` used a component. The cost is that `.md` inherits
   the MDX deviations (§8); the benefit is one grammar, one compiler, one cached output.
-- **GFM on; highlighting/raw-HTML stay off. Heading slugs/autolinks are now ON (reversed
-  2026-07-05).** `remark-gfm` is included because tables/task-lists/strikethrough are table stakes.
-  **Heading slugs + autolink anchors were originally left off ("no v1 change planned") and are now a
-  v1 target (§15, R3-186).** *Reversal rationale:* linkable headings are table stakes for the
+- **GFM on; highlighting/raw-HTML stay off. Heading slugs/autolinks are ON (reversed 2026-07-05;
+  SHIPPED 2026-07-10, R3-186 + R3-211).** `remark-gfm` is included because tables/task-lists/
+  strikethrough are table stakes.
+  **Heading slugs + autolink anchors were originally left off ("no v1 change planned") and are now
+  shipped (§15, R3-186; the §15.1 section-id scheme R3-211).** *Reversal rationale:* linkable headings are table stakes for the
   docs/wiki content the platform is being built around (the roadmap-as-Grove-wiki dogfood needs
   in-page anchors and a TOC that agrees with them), and the original "one highlighter / one anchor
   style" objection **does not apply** — the anchor compiles to an overridable `<HeadingAnchor>`
@@ -822,16 +844,18 @@ late-binding win that motivated compiling admonitions/wiki-links to components.
 
 - **Admonition default styling.** How much default CSS/icons ship in the SDK vs. are left to apps
   (§12.3). *(The plugin-choice half is settled — in-house, see Decisions.)*
-- **HeadingAnchor default styling & always-on scope (§15).** How much default CSS/icon ships with
-  the default `<HeadingAnchor>` vs. is left to apps (parallels the admonition question), and whether
-  the autolink is emitted for **every** heading unconditionally or gains an opt-out (e.g. a
-  frontmatter flag / a min-depth). *(The plugin-choice and slug-vs-component split are settled —
-  in-house remark plugin, `id` on the heading + component anchor, see §15.2/§15.4 and Decisions.)*
+- **HeadingAnchor default styling (§15).** How much default CSS/icon ships with the default
+  `<HeadingAnchor>` vs. is left to apps (parallels the admonition question). *(Settled at build,
+  R3-186/R3-211: in-house remark plugin, `id` on the heading + component anchor, autolink on for
+  **every** heading, `sectionIds: false` frontmatter opt-out for the section-id scheme — see
+  §15.1/§15.2/§15.4 and Decisions. The default anchor ships intentionally-minimal `ir-heading-anchor`
+  markup; richer styling is app-owned.)*
 - **The per-app plugin seam.** Keep new syntax kernel-only (current stance), or design an opt-in
   per-app rehype/remark layer that preserves per-file byte-identity? (Supersedes the prior
   "opt-in rehype layer" question.)
 - **Roadmap items — assigned.** §11 → **R3-151** (foundational), §12 → **R3-152**, §13 → **R3-153**,
-  §14 → **R3-154**, §15 → **R3-186** (`docs/roadmap/`). §12/§13 depend on §11; §14.3 depends on §13;
-  §15 depends on §11 (it ships a new phantom default `<HeadingAnchor>`), otherwise independent.
+  §14 → **R3-154**, §15 → **R3-186** + **R3-211** (§15.1 section ids) — all landed (`docs/roadmap/ARCHIVE.md`).
+  §12/§13 depend on §11; §14.3 depends on §13; §15 depends on §11 (it ships a new phantom default
+  `<HeadingAnchor>`), otherwise independent.
 - **Angle-bracket autolink.** Should the CommonMark `<https://…>` autolink be made to work under
   MDX (currently unreliable because `<` starts JSX), or is the GFM bare-URL form (§5) sufficient?
