@@ -593,6 +593,45 @@ always present in the defaults, a plain repo renders wiki-links with no app coop
   authors of pre-existing Obsidian-style content. (Literal `[[…]]` inside an inline code span or
   code block is untouched — the plugin only rewrites `text` nodes.)
 
+### 13.5 Fragments — link-to-section  *(reference — shipped by R3-212, `@immediately-run/sdk` ≥ 0.31.0)*
+
+A link target may carry a `#fragment` naming a **heading id** (§15) — the seam that joins
+wiki-links (which resolve *file → file*, §13.3) to heading ids (which make sections
+*addressable*, §15). It applies uniformly to both link forms: `[[FILE.mdx#sec-8-9]]` /
+`[[#sec-8-9]]` and the equivalent markdown `[text](FILE.mdx#sec-8-9)` / `[text](#sec-8-9)`.
+This is a **render-time** concern — the kernel plugin keeps carrying the raw target verbatim
+(§13.2), so per-file byte-identity (§10) is untouched; the behavior lives entirely in the SDK
+default `<WikiLink>` / `a` and router, so **every** immediately.run app inherits deep-linking
+(not only a wiki app). It decomposes into three parts:
+
+**(A) Split.** `splitHash(target)` divides the target at its **first** `#` into a *path part*
+and a *fragment* (`FOO.mdx#sec-8-9` → `["FOO.mdx", "sec-8-9"]`; `#sec-8-9` → `["", "sec-8-9"]`;
+`FOO.mdx` → `["FOO.mdx", ""]`). A fragment never contains a further `#`.
+
+**(B) Resolve on the stripped path.** The §13.3 existence rules run on the **path part**, not
+the whole `…#frag` string — so a section citation to an existing file resolves (**not** the
+broken state). The states, refined:
+
+- **path empty, fragment present** (`[[#sec-8-9]]`), or the path resolves to the **current
+  file**: a **same-page anchor** — scroll to `#fragment` within the current document, **no route
+  change**.
+- **path resolves to another file:** in-app navigation (§13.3 `resolved`) to the path,
+  **carrying the fragment** into part (C).
+- **path is missing:** the **broken** state (file existence still wins — a fragment does not
+  rescue a missing file).
+
+**(C) Scroll after navigation.** In-app navigation swaps the rendered file *asynchronously*, so
+the element the fragment addresses does not exist at click time. After the destination file's
+tree mounts, the router scrolls to the target — trying the element's own `id` (a numbered
+heading's `sec-…` id or a prose heading's text slug, §15.1), then the `[data-slug]` hook (a
+citation that used the prose text slug still lands), then **top-of-page**. A missing or bogus
+fragment on an otherwise-resolved page degrades to top-of-page and is **never** a hard failure.
+The scroll retries on a short cadence (a `MutationObserver` over late-mounting subtrees plus a
+few timed retries) until the target appears.
+
+Overridable per §11 (an app may supply its own `<WikiLink>` / router behavior); the default
+above is what a plain repo gets with no cooperation.
+
 ---
 
 ## 14. ESM expressions in link labels, URLs, and wiki targets  *(reference — confirmed + locked by R3-154, `test/esmLinks.test.mjs`)*
