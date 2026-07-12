@@ -1,6 +1,6 @@
 {
   "name": "@immediately-run/transpiler",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "The single source of truth for immediately.run's per-file transform chain (MDX + Babel + react-refresh), shared byte-for-byte between the browser sandbox bundler and the CLI's pre-transpiled-artifact emitter.",
   "license": "MIT",
   "repository": "github:immediately-run/transpiler",
