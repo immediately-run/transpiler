@@ -21,6 +21,12 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: 'es2020',
+  // The shared remark plugins (the safe subset, R3-213) are bundled (inlined) into
+  // this dist rather than externalized, so the transpiler's consumers (sandbox, cli,
+  // site-main) gain no new transitive runtime dependency and the compiled MDX bytes
+  // stay identical to when the plugins lived in `src/mdx/`. The package is still the
+  // ONE source both paths share — the SDK safe renderer imports the same source.
+  noExternal: ['@immediately-run/mdx-plugins'],
   external: [
     '@babel/standalone',
     '@babel/plugin-proposal-explicit-resource-management',

@@ -45,8 +45,10 @@ export type { FrontmatterParseResult } from './mdx/frontmatter';
 // Exported so a consumer that must reproduce the kernel's heading ids WITHOUT
 // re-compiling — Grove's in-page `<Toc>` (`grove/src/lib/wiki.ts`), or any TOC —
 // derives byte-identical ids from the one shared implementation.
-export { textSlug, sectionId } from './mdx/remarkHeadingAnchors';
-export type { HeadingAnchorOptions } from './mdx/remarkHeadingAnchors';
+// Re-exported from the shared plugin package (R3-213) — the transpiler's public API
+// is unchanged (additive/stable); the source of truth just moved out of `src/mdx/`.
+export { textSlug, sectionId } from '@immediately-run/mdx-plugins';
+export type { HeadingAnchorOptions } from '@immediately-run/mdx-plugins';
 
 // Dependency-map facts the CLI needs to compute the lockset input, plus the
 // resolution-completeness guard shared with the sandbox runtime + CLI builder.
