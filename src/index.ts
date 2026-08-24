@@ -17,6 +17,9 @@ export type {
 // Chain internals, exported so the sandbox can route its existing transformer
 // classes through this package without re-implementing the chain.
 export { transformBabel } from './babel/transform';
+// R3-328: the identifier the import-meta shim emits — a cross-repo contract with the
+// sandbox's module evaluator, which provides it as a frozen `{ url }` per module.
+export { IMPORT_META_GLOBAL } from './babel/import-meta-shim';
 export type { ITransformData, BabelTransformResult } from './babel/transform';
 export {
   selectReactChain,

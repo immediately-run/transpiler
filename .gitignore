@@ -2,3 +2,4 @@ node_modules/
 dist/
 worker/
 *.log
+node_modules
