@@ -11,7 +11,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { transformBabel, IMPORT_META_GLOBAL, PLAIN_BABEL_CONFIG } from '../dist/index.js';
+import { transformBabel, transformFile, IMPORT_META_GLOBAL, PLAIN_BABEL_CONFIG } from '../dist/index.js';
+
+// Build the expected identifier from the exported constant, not a literal, so the
+// cross-repo name stays pinned in exactly one place.
+const META_URL = `${IMPORT_META_GLOBAL}.url`;
+const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 test('row 1: a .wasm import is collected as a dependency and required at runtime', async () => {
   const { code, dependencies } = await transformBabel({
@@ -31,19 +36,40 @@ test('row 1: a .wasm import is collected as a dependency and required at runtime
   assert.equal(moduleObj.exports.default, dataUrl);
 });
 
+// Goes through `transformFile()` so the CHAIN IS SELECTED BY THE REAL PRODUCER
+// rather than hand-picked. `/app/src/loader.ts` is app-root but not matched by
+// APP_ROOT_REFRESH_RE (which covers js/jsx/mjs/cjs/tsx, not bare .ts), so it
+// legitimately lands on the plain chain and the emitted classic script can be
+// evaluated. The react-refresh chain a `.js` loader really takes is pinned by the
+// test below it — an earlier version of this file asserted the idiom against
+// PLAIN_BABEL_CONFIG on a `.js` path, i.e. a chain no such file ever takes.
 test('row 2: new URL(sibling, import.meta.url) evaluates and resolves beside the module', async () => {
-  const { code } = await transformBabel({
+  const { code, error } = await transformFile({
+    path: '/app/src/loader.ts',
     code: `export const wasmUrl = new URL('./add.wasm', import.meta.url);`,
-    filepath: '/app/src/loader.js',
-    config: PLAIN_BABEL_CONFIG,
   });
+  assert.equal(error, undefined, `transformFile: ${error?.message}`);
   assert.ok(!/import\.meta/.test(code), 'no import.meta may survive the transform');
 
-  const meta = Object.freeze({ url: 'https://sandbox.immediately.run/app/src/loader.js' });
+  const meta = Object.freeze({ url: 'https://sandbox.immediately.run/app/src/loader.ts' });
   const moduleObj = { exports: {} };
   const fn = new Function(IMPORT_META_GLOBAL, 'require', 'module', 'exports', code);
   fn(meta, () => ({}), moduleObj, moduleObj.exports);
   assert.equal(moduleObj.exports.wasmUrl.href, 'https://sandbox.immediately.run/app/src/add.wasm');
+});
+
+// The chain a real wasm-pack / Emscripten loader actually takes: an app-root `.js`
+// selects react-refresh. The refresh wrapper makes the module awkward to evaluate
+// standalone, so this pins the rewrite itself — which is the part the sandbox's
+// module-space fetch depends on.
+test('row 2 on the react-refresh chain an app-root .js really selects', async () => {
+  const { code, error } = await transformFile({
+    path: '/app/src/loader.js',
+    code: `export const wasmUrl = new URL('./add.wasm', import.meta.url);`,
+  });
+  assert.equal(error, undefined, `transformFile: ${error?.message}`);
+  assert.ok(!/import\\.meta/.test(code), 'no import.meta may survive the refresh chain either');
+  assert.match(code, new RegExp(esc(META_URL)));
 });
 
 test('row 2, wasm-pack shape: fetch(new URL(...)) stays a plain global fetch call', async () => {
@@ -52,8 +78,8 @@ test('row 2, wasm-pack shape: fetch(new URL(...)) stays a plain global fetch cal
   // global reference the evaluator can provide), not some rewritten indirection.
   const { code } = await transformBabel({
     code: `export const p = fetch(new URL('./add.wasm', import.meta.url));`,
-    filepath: '/app/src/loader.js',
+    filepath: '/app/src/loader.ts',
     config: PLAIN_BABEL_CONFIG,
   });
-  assert.match(code, /fetch\(new URL\('\.\/add\.wasm', \$ir_import_meta\.url\)\)/);
+  assert.match(code, new RegExp(`fetch\\(new URL\\('\\./add\\.wasm', ${esc(META_URL)}\\)\\)`));
 });
