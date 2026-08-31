@@ -55,7 +55,8 @@ export type { HeadingAnchorOptions } from '@immediately-run/mdx-plugins';
 
 // Dependency-map facts the CLI needs to compute the lockset input, plus the
 // resolution-completeness guard shared with the sandbox runtime + CLI builder.
-export { computeInputDepMap, assertDependenciesResolved } from './depmap';
+export { computeInputDepMap, assertDependenciesResolved, rootRuntimeDependencies } from './depmap';
+export type { RootPackageShape } from './depmap';
 export type { DepMap, ResolvedDependency } from './depmap';
 export { filterBuildDeps, isBuildDep } from './presets/build-dep';
 
