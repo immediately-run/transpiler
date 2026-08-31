@@ -6,6 +6,7 @@ import {
   computeInputDepMap,
   filterBuildDeps,
   isBuildDep,
+  rootRuntimeDependencies,
 } from '../dist/index.js';
 
 test('assertDependenciesResolved: passes when every requested dep is in the resolved set', () => {
@@ -81,4 +82,32 @@ test('isBuildDep / filterBuildDeps', () => {
   assert.equal(isBuildDep('babel-preset-react-app'), true);
   assert.equal(isBuildDep('react'), false);
   assert.deepEqual(filterBuildDeps({ react: '^19', vite: '^5' }), { react: '^19' });
+});
+
+// --- rootRuntimeDependencies (R3-289) ---------------------------------------
+
+test('rootRuntimeDependencies: a peer-only declaration is fetched (the root has no consumer)', () => {
+  const out = rootRuntimeDependencies({ peerDependencies: { react: '^19.0.0' } });
+  assert.deepEqual(out, { react: '^19.0.0' });
+});
+
+test('rootRuntimeDependencies: dependencies win when both declare the same name', () => {
+  const out = rootRuntimeDependencies({
+    dependencies: { react: '^18.2.0' },
+    peerDependencies: { react: '^19.0.0' },
+  });
+  assert.equal(out.react, '^18.2.0');
+});
+
+test('rootRuntimeDependencies: peerDependenciesMeta optional entries are skipped', () => {
+  const out = rootRuntimeDependencies({
+    peerDependencies: { react: '^19.0.0', '@types/react': '^19.0.0' },
+    peerDependenciesMeta: { '@types/react': { optional: true } },
+  });
+  assert.deepEqual(out, { react: '^19.0.0' });
+});
+
+test('rootRuntimeDependencies: empty/absent everything yields {}', () => {
+  assert.deepEqual(rootRuntimeDependencies({}), {});
+  assert.deepEqual(rootRuntimeDependencies(undefined), {});
 });

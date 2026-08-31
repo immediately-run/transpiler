@@ -4,6 +4,49 @@ import { isBuildDep } from './presets/build-dep';
 // dependency name => version range, same shape the runtime uses.
 export type DepMap = Record<string, string>;
 
+/** The package.json fields `rootRuntimeDependencies` reads. Everything else is
+ *  ignored, so a full parsed package.json satisfies it. */
+export interface RootPackageShape {
+  dependencies?: DepMap;
+  peerDependencies?: DepMap;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+}
+
+/**
+ * The dependency map a package AT THE ROOT OF A RUN resolves against (R3-289).
+ *
+ * For a package being *consumed*, `peerDependencies` is a request the consumer
+ * satisfy — and the bundler's library-mount path deliberately ignores peers for
+ * exactly that reason. But the package at the root of a run has no consumer: the
+ * platform is the environment, so a peer it declares and nobody fetches is
+ * simply absent. Two failure shapes, neither naming the cause:
+ *
+ *  1. the React preset injects `react-error-boundary` into every app, it imports
+ *     `react`, and an app whose ONLY react declaration is a peer dies with
+ *     `Cannot find module 'react'` (R3-289's Grove finding);
+ *  2. a peer-only `@immediately-run/sdk` pin never reaches self-host resolution
+ *     and silently falls back to the (very stale) platform default version.
+ *
+ * So at the root, non-optional peers are fetched like dependencies, with
+ * `dependencies` winning any name both declare and `peerDependenciesMeta`
+ * `.optional` entries skipped (npm's own semantics: an optional peer may be
+ * absent). Shared by the sandbox runtime (`loadNodeModules`) and the CLI
+ * cache-zip builder (the lockset input DepMap) so the runtime's echo-match
+ * against a zip's lockset holds — two implementations would silently degrade
+ * every peer-declaring app's zip to live resolution.
+ */
+export function rootRuntimeDependencies(pkg: RootPackageShape | undefined | null): DepMap {
+  const peers: DepMap = {};
+  const peerDeps = pkg?.peerDependencies ?? {};
+  const meta = pkg?.peerDependenciesMeta ?? {};
+  for (const [name, range] of Object.entries(peerDeps)) {
+    if (typeof range !== 'string') continue;
+    if (meta[name]?.optional) continue;
+    peers[name] = range;
+  }
+  return { ...peers, ...(pkg?.dependencies ?? {}) };
+}
+
 // One entry of the CDN's resolved flat dependency list (the `/dep_tree/` wire
 // format): name / exact version / depth. The completeness check below only reads
 // the name; the full shape is exported for callers that hold the resolved list.
