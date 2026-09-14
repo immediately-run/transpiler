@@ -176,7 +176,8 @@ test('the recorded two-dep answer names react, react-dom and the scheduler', () 
     out.map((e) => e.n).sort(),
     ['react', 'react-dom', 'scheduler'],
   );
-  // The transitive entry carries no re-pin range — only top-level entries do.
+  // The scheduler was not REQUESTED, so it carries no re-pin range; react and
+  // react-dom were, so they do.
   assert.equal(out.find((e) => e.n === 'scheduler').range, undefined);
 });
 
