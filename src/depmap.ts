@@ -134,7 +134,8 @@ export interface UnrequestedPrerelease {
   v: string;
   /** depth in the resolved tree (0 = top-level) */
   d: number;
-  /** the range that was requested, when the entry is top-level (re-pin fuel) */
+  /** the range that was requested, when the entry's package was requested
+   *  (re-pin fuel — top-level entries carry it) */
   range?: string;
 }
 

@@ -129,6 +129,15 @@ test('concreteVersion: keeps prerelease and build suffixes of the first token', 
   assert.equal(concreteVersion('^1.0.0+build.7'), '1.0.0+build.7');
 });
 
+test('concreteVersion: a bare exact version is concrete (no operator needed)', () => {
+  assert.equal(concreteVersion('0.2.8'), '0.2.8');
+  assert.equal(concreteVersion('0.3.0-rc.1'), '0.3.0-rc.1');
+});
+
+test('concreteVersion: a two-component version is NOT concrete (three-component core required)', () => {
+  assert.equal(concreteVersion('1.2'), undefined);
+});
+
 test('concreteVersion: a tag, URL, star or multi-range is not concrete (the caller fails loud)', () => {
   assert.equal(concreteVersion('latest'), undefined);
   assert.equal(concreteVersion('*'), undefined);
