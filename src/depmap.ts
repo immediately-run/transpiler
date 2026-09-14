@@ -93,6 +93,78 @@ export function assertDependenciesResolved(
   );
 }
 
+/**
+ * Reduce a package.json dependency range to a concrete `x.y.z[-pre][+build]`
+ * version — the range's FLOOR (what a caret/hyphenless range guarantees): strip
+ * a leading range operator and take the first version token. Returns
+ * `undefined` for anything that is not a single pinned-ish version (a tag, a
+ * URL, `*`, a multi-range), in which case the caller cannot re-pin and fails
+ * loud. Absorbed from the sandbox's `registryResolvedModules.ts` so the
+ * prerelease guard below can pin to the floor in exactly one spelling
+ * (PRETRANSPILED_ARTIFACTS_SPEC §4.4: the shared package is the single home).
+ *
+ * `^0.2.7` → `0.2.7`.
+ */
+export function concreteVersion(range: string | undefined): string | undefined {
+  if (typeof range !== 'string') return undefined;
+  const trimmed = range
+    .trim()
+    .replace(/^[\^~]|^>=|^<=|^>|^<|^=|^v/g, '')
+    .trim();
+  const m = trimmed.match(/^(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)/);
+  return m ? m[1] : undefined;
+}
+
+/** A version is a prerelease when its `x.y.z` core is followed by `-`; build
+ *  metadata (`+…`) is ignored, matching the sandbox's `compareSemver`. No
+ *  semver library — this is the whole rule. */
+export function isPrereleaseVersion(version: string): boolean {
+  return /^\d+\.\d+\.\d+-/.test(version.split('+')[0]);
+}
+
+/** Does this RANGE itself ask for a prerelease (e.g. `^19.3.0-rc.1`)? The one
+ *  range question the guard needs — deliberately not a range evaluator. */
+const carriesPrerelease = (range: string): boolean => /\d+\.\d+\.\d+-[0-9A-Za-z]/.test(range);
+
+/** One resolved entry nobody asked for as a prerelease. */
+export interface UnrequestedPrerelease {
+  /** package name */
+  n: string;
+  /** the prerelease version the CDN resolved to */
+  v: string;
+  /** depth in the resolved tree (0 = top-level) */
+  d: number;
+  /** the range that was requested, when the entry is top-level (re-pin fuel) */
+  range?: string;
+}
+
+/**
+ * The unrequested-prerelease guard (R3-600): the primary CDN's `/dep_tree/` has
+ * answered a caret range with a canary (`react ^19.2.5` →
+ * `19.3.0-canary-ff7445e6-20260831` while stable 19.3.0 was on npm) — under
+ * npm's semver a caret NEVER matches a prerelease, so every app declaring the
+ * range ran a canary in production. Returns the resolved entries that are
+ * prereleases although NO requested range asked for one; each caller decides
+ * what to do (the sandbox re-resolves top-level offenders pinned to their
+ * range's floor and fails the boot if one survives; the CLI never embeds one).
+ *
+ * If ANY requested range carries a prerelease tag, nothing is refused — a range
+ * like `^19.3.0-rc.1` legitimately resolves to (and pulls dependencies on)
+ * prereleases.
+ */
+export function findUnrequestedPrereleases(
+  requested: DepMap,
+  resolved: readonly ResolvedDependency[],
+): UnrequestedPrerelease[] {
+  if (Object.values(requested).some(carriesPrerelease)) return [];
+  const out: UnrequestedPrerelease[] = [];
+  for (const dep of resolved) {
+    if (!isPrereleaseVersion(dep.v)) continue;
+    out.push({ n: dep.n, v: dep.v, d: dep.d, ...(requested[dep.n] !== undefined ? { range: requested[dep.n] } : {}) });
+  }
+  return out;
+}
+
 // Modules the runtime ALWAYS resolves from a self-hosted versioned origin, not
 // the sandpack CDN (sandbox `SELF_HOST_BASES`). Resolution is implicit, so these
 // are stripped from the input DepMap unconditionally — keep in sync with the

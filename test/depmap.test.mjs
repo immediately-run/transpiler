@@ -4,8 +4,11 @@ import assert from 'node:assert/strict';
 import {
   assertDependenciesResolved,
   computeInputDepMap,
+  concreteVersion,
   filterBuildDeps,
+  findUnrequestedPrereleases,
   isBuildDep,
+  isPrereleaseVersion,
   rootRuntimeDependencies,
 } from '../dist/index.js';
 
@@ -110,4 +113,92 @@ test('rootRuntimeDependencies: peerDependenciesMeta optional entries are skipped
 test('rootRuntimeDependencies: empty/absent everything yields {}', () => {
   assert.deepEqual(rootRuntimeDependencies({}), {});
   assert.deepEqual(rootRuntimeDependencies(undefined), {});
+});
+
+// --- concreteVersion (moved from the sandbox; the re-pin floor) ---------------
+
+test('concreteVersion: a caret range reduces to its floor', () => {
+  assert.equal(concreteVersion('^0.2.7'), '0.2.7');
+  assert.equal(concreteVersion('~1.2.3'), '1.2.3');
+  assert.equal(concreteVersion('>=2.0.0'), '2.0.0');
+  assert.equal(concreteVersion('v1.2.3'), '1.2.3');
+});
+
+test('concreteVersion: keeps prerelease and build suffixes of the first token', () => {
+  assert.equal(concreteVersion('^1.0.0-beta.1'), '1.0.0-beta.1');
+  assert.equal(concreteVersion('^1.0.0+build.7'), '1.0.0+build.7');
+});
+
+test('concreteVersion: a tag, URL, star or multi-range is not concrete (the caller fails loud)', () => {
+  assert.equal(concreteVersion('latest'), undefined);
+  assert.equal(concreteVersion('*'), undefined);
+  assert.equal(concreteVersion('github:a/b'), undefined);
+  assert.equal(concreteVersion('1.x || 2.x'), undefined);
+  assert.equal(concreteVersion(undefined), undefined);
+});
+
+// --- findUnrequestedPrereleases (R3-600) — the recorded 2026-09-11 CDN answers,
+// verbatim: the primary /dep_tree/ resolved caret ranges to a canary while
+// stable 19.3.0 was on npm. ------------------------------------------------------
+
+const CANARY = '19.3.0-canary-ff7445e6-20260831';
+
+test('the recorded canary answer names react', () => {
+  const out = findUnrequestedPrereleases(
+    { react: '^19.2.5' },
+    [{ n: 'react', v: CANARY, d: 0 }],
+  );
+  assert.equal(out.length, 1);
+  assert.equal(out[0].n, 'react');
+  assert.equal(out[0].v, CANARY);
+  assert.equal(out[0].range, '^19.2.5');
+});
+
+test('the recorded two-dep answer names react, react-dom and the scheduler', () => {
+  const out = findUnrequestedPrereleases(
+    { react: '^19.2.5', 'react-dom': '^19.2.5' },
+    [
+      { n: 'react', v: CANARY, d: 0 },
+      { n: 'react-dom', v: CANARY, d: 0 },
+      { n: 'scheduler', v: '0.28.0-canary-ff7445e6-20260831', d: 1 },
+    ],
+  );
+  assert.deepEqual(
+    out.map((e) => e.n).sort(),
+    ['react', 'react-dom', 'scheduler'],
+  );
+  // The transitive entry carries no re-pin range — only top-level entries do.
+  assert.equal(out.find((e) => e.n === 'scheduler').range, undefined);
+});
+
+test('the recorded exact-pin and ^18 answers name nothing', () => {
+  assert.deepEqual(
+    findUnrequestedPrereleases({ react: '19.2.5' }, [{ n: 'react', v: '19.2.5', d: 0 }]),
+    [],
+  );
+  assert.deepEqual(
+    findUnrequestedPrereleases({ react: '^18.3.1' }, [{ n: 'react', v: '18.3.1', d: 0 }]),
+    [],
+  );
+});
+
+test('a requested prerelease range allows prereleases anywhere in the answer', () => {
+  assert.deepEqual(
+    findUnrequestedPrereleases(
+      { react: '^19.3.0-rc.1' },
+      [
+        { n: 'react', v: '19.3.0-rc.2', d: 0 },
+        { n: 'scheduler', v: '0.28.0-rc.1', d: 1 },
+      ],
+    ),
+    [],
+  );
+});
+
+test('build metadata alone is not a prerelease', () => {
+  assert.equal(isPrereleaseVersion('19.3.0+build.1'), false);
+  assert.deepEqual(
+    findUnrequestedPrereleases({ react: '^19.2.5' }, [{ n: 'react', v: '19.3.0+build.1', d: 0 }]),
+    [],
+  );
 });
