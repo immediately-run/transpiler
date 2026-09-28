@@ -80,6 +80,19 @@ test('frontmatter is stripped before MDX compile (no YAML leaks into output)', a
   assert.ok(!result.code.includes('secretKey'), 'frontmatter must not appear in compiled output');
 });
 
+test('GHSA-48c2-rrv3-qjmp regression: deeply nested YAML frontmatter cannot stack-overflow the parse', async () => {
+  // yaml <2.8.3 recursed without a depth bound on nested collections; the
+  // frontmatter of an MDX file is attacker-controlled content, so this was a
+  // real reachability (R3-258). The fixed floor is yaml ^2.9.1. 10k nested
+  // arrays must produce a parse result or an ordinary { error }, never a
+  // RangeError crash that takes the worker down with it.
+  const depth = 10_000;
+  const evil = `---\na: ${'['.repeat(depth)}${']'.repeat(depth)}\n---\n\n# Title\n`;
+  const result = await transformFile({ path: '/app/content/deep.mdx', code: evil });
+  assert.ok(result && typeof result === 'object');
+  if ('error' in result) assert.equal(typeof result.error.message, 'string');
+});
+
 test('error-omission: malformed MDX returns { error }, never throws', async () => {
   // An unterminated JSX expression is an MDX compile error.
   const result = await transformFile({ path: '/app/content/bad.mdx', code: '# Hi\n\n<Unclosed\n' });
