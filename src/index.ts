@@ -39,9 +39,11 @@ export {
 // MDX: the compile stage + the shared frontmatter parser. The sandbox routes its
 // `MDXTransformer` + `frontmatter.ts` through these (MDX_CONTENT_COLLECTIONS_SPEC
 // §1.1), and the CLI's cache-zip metadata sidecar (G-MDX-3) will reuse
-// `parseFrontmatter` so its values are byte-identical to the live scan.
+// `parseFrontmatter` so its values are byte-identical to the live scan. Since R3-1348
+// `parseFrontmatter` delegates to `@immediately-run/mdx-plugins/frontmatter`, the parser
+// every other corpus reader uses, and throws `FrontmatterParseError` on a rejected block.
 export { compileMdx, MdxCompileError } from './mdx/compile';
-export { parseFrontmatter } from './mdx/frontmatter';
+export { parseFrontmatter, FrontmatterParseError } from './mdx/frontmatter';
 export type { FrontmatterParseResult } from './mdx/frontmatter';
 
 // Heading slug / section-id computation (MARKDOWN_SYNTAX_SPEC §15.1, R3-186/R3-211).
