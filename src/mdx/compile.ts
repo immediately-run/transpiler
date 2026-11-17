@@ -72,7 +72,10 @@ export async function compileMdx(code: string, path: string): Promise<string> {
   const { data, content, error } = splitFrontmatter(code);
   // Invalid YAML fails the compile, as it always has (the previous parser threw here). A
   // block that parses but is not a map, or holds a non-JSON value, compiled before R3-1348
-  // and still does: its metadata is dropped (the scan logs it), its body still renders.
+  // and still does: its body renders. But a rejected block contributes NO keys — the canon
+  // returns `data: {}` — so a `sectionIds: false` beside a `!!timestamp` no longer applies
+  // (it did before, when the old parser kept the block's other keys). The metadata scan
+  // logs the rejection, which is where the author learns of it.
   if (error?.kind === 'yaml') throw new FrontmatterParseError(error);
   const { compile, remarkGfm } = await loadMdxDeps();
   // §15.1 opt-out (R3-211): `sectionIds: false` forces plain text-slug ids for the

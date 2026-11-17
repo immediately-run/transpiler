@@ -12,10 +12,24 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
-import { FRONTMATTER_PARITY_FIXTURE } from '@immediately-run/mdx-plugins/frontmatter';
+import { FRONTMATTER_PARITY_FIXTURE, parseFrontmatter as parseCanon } from '@immediately-run/mdx-plugins/frontmatter';
 import { parseFrontmatter, FrontmatterParseError, compileMdx } from '../dist/index.js';
 
 const SRC = new URL('../src/', import.meta.url).pathname;
+
+/** The error a call throws, or null. */
+function thrownBy(fn) {
+  try {
+    fn();
+  } catch (e) {
+    return e;
+  }
+  return null;
+}
+
+// Review 1-A-2: every way a module can load `yaml` (or a `yaml/…` subpath) — static,
+// side-effect, dynamic import, re-export, require — not only `from 'yaml'`.
+const YAML_IMPORT = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]yaml(?:\/[^'"]*)?['"]/;
 const walk = (d) =>
   readdirSync(d).flatMap((n) => {
     const p = join(d, n);
@@ -26,11 +40,12 @@ test('every canon fixture case: the same data, or a FrontmatterParseError of the
   assert.ok(FRONTMATTER_PARITY_FIXTURE.length >= 30, 'the fixture is the real one');
   for (const c of FRONTMATTER_PARITY_FIXTURE) {
     if (c.expected.errorKind) {
-      assert.throws(
-        () => parseFrontmatter(c.source),
-        (e) => e instanceof FrontmatterParseError && e.kind === c.expected.errorKind,
-        `${c.name}: expected a ${c.expected.errorKind} FrontmatterParseError — ${c.why}`,
-      );
+      const e = thrownBy(() => parseFrontmatter(c.source));
+      assert.ok(e instanceof FrontmatterParseError, `${c.name}: expected a FrontmatterParseError — ${c.why}`);
+      assert.equal(e.kind, c.expected.errorKind, `${c.name}: kind`);
+      // Review 1-A-0 / 1-B-1: the canon's own message reaches the thrown one.
+      const canon = parseCanon(c.source).error;
+      assert.ok(e.message.includes(canon.message), `${c.name}: "${e.message}" carries "${canon.message}"`);
       continue;
     }
     const { data } = parseFrontmatter(c.source);
@@ -41,22 +56,30 @@ test('every canon fixture case: the same data, or a FrontmatterParseError of the
 
 test('the thrown error carries the canon message, its yaml code and the document position', () => {
   const hero = FRONTMATTER_PARITY_FIXTURE.find((c) => c.name === 'real-grove-hero-unquoted');
-  let e = null;
-  try {
-    parseFrontmatter(hero.source);
-  } catch (err) {
-    e = err;
-  }
+  const e = thrownBy(() => parseFrontmatter(hero.source));
   assert.ok(e, 'the unquoted hero.mdx must not parse');
   assert.equal(e.name, 'FrontmatterParseError');
   assert.equal(e.kind, 'yaml');
   assert.equal(e.line, 4);
   assert.equal(typeof e.code, 'string');
   assert.match(e.message, /^frontmatter \(line 4, column \d+\): /);
+  const canon = parseCanon(hero.source).error;
+  assert.equal(e.message, `frontmatter (line ${canon.line}, column ${canon.column}): ${canon.message}`);
 });
 
 test('subject guard: src/ imports no yaml, and the frontmatter module calls the canon', () => {
-  const offenders = walk(SRC).filter((f) => /from\s*['"]yaml['"]|require\(\s*['"]yaml['"]\s*\)/.test(readFileSync(f, 'utf8')));
+  for (const form of [
+    "import { parse } from 'yaml';",
+    'import "yaml";',
+    "const y = await import('yaml');",
+    "export { parse } from 'yaml';",
+    "const y = require('yaml');",
+    "import { Document } from 'yaml/dist/doc';",
+  ]) assert.match(form, YAML_IMPORT, `the guard sees: ${form}`);
+  for (const benign of ["import x from 'yaml-front-matter';", "// a comment about yaml", "const yamlText = '';"]) {
+    assert.doesNotMatch(benign, YAML_IMPORT, `the guard ignores: ${benign}`);
+  }
+  const offenders = walk(SRC).filter((f) => YAML_IMPORT.test(readFileSync(f, 'utf8')));
   assert.deepEqual(offenders, [], 'a second YAML reader in src/');
   const fm = readFileSync(join(SRC, 'mdx/frontmatter.ts'), 'utf8');
   assert.match(fm, /from '@immediately-run\/mdx-plugins\/frontmatter'/);
@@ -85,6 +108,18 @@ test('the <More /> excerpt is lifted onto data and stripped from content, as bef
   const atStart = parseFrontmatter('---\nt: x\n---\n<More />\nBody\n');
   assert.equal(atStart.data.excerpt, undefined);
   assert.ok(atStart.content.startsWith('<More />'));
+});
+
+test('compileMdx: a rejected block contributes no keys — its sectionIds opt-out included', async () => {
+  // Review 1-B-0: before R3-1348 a block holding a Date still yielded its other keys, so
+  // `sectionIds: false` applied. The canon rejects such a block whole (data {}), and a
+  // rejected block has no keys: the heading gets the default section id. Pinned here so
+  // the change is a stated rule, not a surprise.
+  const body = '\n## 5.2 Hi there\n';
+  const ok = await compileMdx(`---\nsectionIds: false\n---\n${body}`, '/app/content/ok.mdx');
+  assert.match(ok, /52-hi-there/, 'a valid block applies its opt-out');
+  const rejected = await compileMdx(`---\nsectionIds: false\nd: !!timestamp 2026-01-01\n---\n${body}`, '/app/content/rejected.mdx');
+  assert.match(rejected, /sec-5-2/, 'a rejected block applies nothing');
 });
 
 test('compileMdx: invalid YAML fails the compile as before; a non-map or non-JSON block still compiles', async () => {
