@@ -117,9 +117,12 @@ test('compileMdx: a rejected block contributes no keys — its sectionIds opt-ou
   // the change is a stated rule, not a surprise.
   const body = '\n## 5.2 Hi there\n';
   const ok = await compileMdx(`---\nsectionIds: false\n---\n${body}`, '/app/content/ok.mdx');
-  assert.match(ok, /52-hi-there/, 'a valid block applies its opt-out');
+  // Review 2-r2-0: match the id ATTRIBUTE — the default output also carries the text slug
+  // as data-slug, so a bare /52-hi-there/ could not fail.
+  assert.match(ok, /id="52-hi-there"/, 'a valid block applies its opt-out');
+  assert.doesNotMatch(ok, /sec-5-2/, 'and no section id appears');
   const rejected = await compileMdx(`---\nsectionIds: false\nd: !!timestamp 2026-01-01\n---\n${body}`, '/app/content/rejected.mdx');
-  assert.match(rejected, /sec-5-2/, 'a rejected block applies nothing');
+  assert.match(rejected, /id="sec-5-2"/, 'a rejected block applies nothing');
 });
 
 test('compileMdx: invalid YAML fails the compile as before; a non-map or non-JSON block still compiles', async () => {
