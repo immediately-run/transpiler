@@ -98,7 +98,13 @@ test('GHSA-48c2-rrv3-qjmp regression: deeply nested YAML frontmatter fails BOUND
     thrown = err;
   }
   assert.ok(thrown, 'the pathological document must not parse successfully');
-  assert.equal(thrown.name, 'YAMLParseError', `expected the bounded yaml error, got ${thrown?.name}: ${thrown?.message?.slice(0, 80)}`);
+  // R3-1348: the parse is the canon's (`@immediately-run/mdx-plugins/frontmatter`), which
+  // never throws and reports why; this wrapper throws FrontmatterParseError carrying the
+  // canon's kind and `yaml`'s own code. RESOURCE_EXHAUSTION is the bounded answer — a raw
+  // RangeError (yaml < 2.8.3) would carry no code.
+  assert.equal(thrown.name, 'FrontmatterParseError', `expected the wrapper's error, got ${thrown?.name}: ${thrown?.message?.slice(0, 80)}`);
+  assert.equal(thrown.kind, 'yaml');
+  assert.equal(thrown.code, 'RESOURCE_EXHAUSTION', `expected the bounded yaml error, got code ${thrown.code}`);
 });
 
 test('the installed yaml satisfies the GHSA-48c2-rrv3-qjmp floor (>= 2.8.3)', async () => {

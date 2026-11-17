@@ -99,7 +99,10 @@ The consequences an author must know follow directly from these choices:
 ## 3. Frontmatter  *(reference)*
 
 Before compilation, a leading YAML **frontmatter** block is stripped by
-`parseFrontmatter` (`src/mdx/frontmatter.ts`) and **never reaches the MDX compiler**:
+`src/mdx/frontmatter.ts` and **never reaches the MDX compiler**. Since R3-1348 that module
+delegates the parse to the one frontmatter parser every corpus reader shares,
+`parseFrontmatter` in `@immediately-run/mdx-plugins/frontmatter`, so the host's metadata
+and Grove's dispatch-mode scan read the same values:
 
 ````markdown
 ---
@@ -115,13 +118,18 @@ draft: false
 
 - **Delimiters:** a first line of `---` (a leading BOM and trailing spaces/tabs on the fence
   are tolerated), closed by a line that is exactly `---`. The block must be at the very top of
-  the file. `FRONTMATTER_RE` in `frontmatter.ts` is the exact matcher.
-- **Grammar:** **YAML 1.2** (the `yaml` package), so nested maps, block/flow sequences, block
-  scalars, and quoted strings all parse, and the "Norway problem" is avoided (`no` is the
-  string `"no"`, **not** `false`). Only a top-level **map** is kept; a scalar/array/null
-  document is ignored and the file is treated as having no frontmatter.
-- **Malformed YAML throws.** The MDX compile path surfaces it as a compile error; the metadata
-  scanners guard with try/catch and skip the file.
+  the file. `FRONTMATTER_RE` in the canon (`@immediately-run/mdx-plugins`
+  `src/frontmatter.ts`) is the exact matcher.
+- **Grammar:** **YAML 1.2** (the `yaml` package, no options), so nested maps, block/flow
+  sequences, block scalars, and quoted strings all parse, and the "Norway problem" is avoided
+  (`no` is the string `"no"`, **not** `false`). Values are JSON: a top-level **map** of
+  strings, finite numbers, booleans, null, lists and maps.
+- **A block that yields no data** — invalid YAML, a list or scalar where the map should be,
+  or a value JSON cannot carry (an explicit `!!timestamp`/`!!binary`/`!!set`/`!!omap` tag,
+  `.inf`/`.nan`, an alias cycle) — makes `parseFrontmatter` throw `FrontmatterParseError`
+  (its `kind`, `yaml`'s `code`, the document line and column). The metadata scanners guard
+  with try/catch and skip the file. The MDX compile path fails only on **invalid YAML**, as it
+  always has; the other two kinds compile, with no metadata.
 
 **Frontmatter is data, not props or exports.** It is **not** injected as `export const
 frontmatter`, and it is **not** passed to the document as `props`. It is surfaced to the app

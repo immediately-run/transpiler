@@ -1,5 +1,30 @@
-import { parse as parseYaml } from 'yaml';
+import { parseFrontmatter as parseCanon } from '@immediately-run/mdx-plugins/frontmatter';
+import type { FrontmatterError } from '@immediately-run/mdx-plugins/frontmatter';
 
+/**
+ * The host's frontmatter parse — a wrapper over the ONE parser every corpus reader shares
+ * (`@immediately-run/mdx-plugins/frontmatter`, R3-1347; this delegation is R3-1348).
+ *
+ * The sandbox's metadata scan, the artifact store and the CLI's cache-zip sidecar call
+ * `parseFrontmatter` here; Grove under dispatch, the docs checker and kanban call the
+ * canon directly. Because this file calls the canon rather than `yaml` itself, the
+ * metadata a forked wiki's index holds and the metadata a dispatched one reads are the
+ * same values by construction — the two used to be different parsers (1,259 of 2,880 real
+ * pages agreed). `test/frontmatter.test.mjs` runs the canon's published fixture against
+ * this package's built export and guards that no `yaml` import returns to `src/`.
+ *
+ * What this wrapper adds, and keeps from the gray-matter era:
+ *  - the `{ data, content }` shape the sandbox and CLI import;
+ *  - the `<More />` excerpt: the text before the first marker, when non-empty, is lifted
+ *    onto `data.excerpt` and stripped (with following whitespace) from `content`. It is
+ *    derived from the BODY, not parsed from the block, so the canon does not compute it:
+ *    the host's metadata may carry `excerpt` and the canon's never does — the one stated
+ *    asymmetry (nothing in grove, docs, kanban, the SDK or the sandbox reads it);
+ *  - a throw when the block yields no data. The canon never throws and reports why in
+ *    `error`; callers here (the sandbox's `extractMetadata`, the CLI's sidecar emitter)
+ *    catch and log, so the throw is how they learn it. It carries the canon's kind, its
+ *    `yaml` code and the document position.
+ */
 export type FrontmatterParseResult = {
   data: Record<string, any>;
   content: string;
@@ -7,63 +32,57 @@ export type FrontmatterParseResult = {
 
 const EXCERPT_SEPARATOR = '<More />';
 
-// A leading `---` fenced block (tolerating a BOM and trailing spaces on the
-// fences), closed by a line that is just `---`. Mirrors gray-matter's delimiter
-// handling so existing `.mdx` frontmatter parses the same — we only swap the YAML
-// engine underneath.
-const FRONTMATTER_RE = /^---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)/;
+/** Thrown by {@link parseFrontmatter} when a present block yields no data. */
+export class FrontmatterParseError extends Error {
+  readonly kind: FrontmatterError['kind'];
+  readonly code?: string;
+  readonly line?: number;
+  readonly column?: number;
+
+  constructor(error: FrontmatterError) {
+    const at = error.line === undefined ? '' : ` (line ${error.line}${error.column === undefined ? '' : `, column ${error.column}`})`;
+    super(`frontmatter${at}: ${error.message}`);
+    this.name = 'FrontmatterParseError';
+    this.kind = error.kind;
+    this.code = error.code;
+    this.line = error.line;
+    this.column = error.column;
+  }
+}
 
 /**
- * Parse leading `---` YAML frontmatter out of an MDX/Markdown source.
- *
- * Uses the pure-ESM `yaml` package (YAML 1.2) rather than gray-matter (which pulls
- * in Node-only `fs`/`Buffer` and an older js-yaml 1.1 — fragile to bundle for the
- * opaque-origin sandbox, and wrong on edge cases like the "Norway problem" where
- * `no` parses to `false`). Complex YAML — nested maps, flow/block sequences, block
- * scalars, quoted strings — is read correctly.
- *
- * Behaviour preserved from the previous gray-matter wrapper:
- *  - returns `{ data, content }`; `data` is `{}` when there is no frontmatter;
- *  - the `<More />` excerpt marker, when present after a non-empty prefix, is
- *    lifted onto `data.excerpt` and stripped (with the following whitespace) from
- *    `content`.
- *
- * Throws on malformed YAML (as gray-matter did); callers that must not fail —
- * the sandbox `Bundler.extractMetadata` / the CLI metadata emitter — guard with
- * try/catch.
- *
- * Moved verbatim from `sandbox/src/bundler/frontmatter.ts` so the runtime live
- * scan and the CLI's cache-zip metadata sidecar derive byte-identical values from
- * the one shared parser (MDX_CONTENT_COLLECTIONS_SPEC §1.1).
+ * The canon's parse plus the excerpt lift, and the canon's `error` when the block yielded
+ * no data — the shared core of {@link parseFrontmatter} (which throws on any error) and
+ * `compileMdx` (which throws only on invalid YAML, as it always has).
  */
-export const parseFrontmatter = (code: string): FrontmatterParseResult => {
-  // Strip a leading BOM so a BOM-prefixed file still matches the fence.
-  const src = code.charCodeAt(0) === 0xfeff ? code.slice(1) : code;
-  let data: Record<string, any> = {};
-  let content = src;
+export function splitFrontmatter(code: string): FrontmatterParseResult & { error?: FrontmatterError } {
+  const parsed = parseCanon(code);
+  const data: Record<string, any> = { ...parsed.data };
+  let content = parsed.content;
 
-  const match = src.match(FRONTMATTER_RE);
-  if (match) {
-    content = src.slice(match[0].length);
-    const yamlText = match[1]; // undefined for an empty `---\n---` block
-    if (yamlText && yamlText.trim()) {
-      const parsed = parseYaml(yamlText);
-      // Frontmatter is conventionally a map; ignore a scalar/array/null document so
-      // `data` stays a usable record (callers do `Object.keys(data)`).
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        data = parsed as Record<string, any>;
-      }
-    }
-  }
-
-  // Excerpt: the text before the first `<More />` marker (gray-matter-compatible).
-  // Only when that prefix is non-empty — a marker at offset 0 is left in place, as
-  // gray-matter's truthy-excerpt check did.
+  // Excerpt: the text before the first `<More />` marker (gray-matter-compatible). Only
+  // when that prefix is non-empty — a marker at offset 0 is left in place, as gray-matter's
+  // truthy-excerpt check did.
   const sepIdx = content.indexOf(EXCERPT_SEPARATOR);
   if (sepIdx > 0) {
     data.excerpt = content.slice(0, sepIdx);
     content = content.slice(sepIdx + EXCERPT_SEPARATOR.length).trimStart();
   }
 
+  return parsed.error ? { data, content, error: parsed.error } : { data, content };
+}
+
+/**
+ * Parse leading `---` YAML frontmatter out of an MDX/Markdown source: `{ data, content }`,
+ * `data` being `{}` when there is no frontmatter.
+ *
+ * Throws {@link FrontmatterParseError} when a block is present but yields no data —
+ * invalid YAML, a block that is not a map, or a value JSON cannot carry (see the canon's
+ * `FrontmatterError`). Callers that must not fail — the sandbox `Bundler.extractMetadata`,
+ * the CLI metadata emitter — guard with try/catch.
+ */
+export const parseFrontmatter = (code: string): FrontmatterParseResult => {
+  const { data, content, error } = splitFrontmatter(code);
+  if (error) throw new FrontmatterParseError(error);
   return { data, content };
 };

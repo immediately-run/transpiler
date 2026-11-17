@@ -1,6 +1,6 @@
 import type { PluggableList } from 'unified';
 
-import { parseFrontmatter } from './frontmatter';
+import { FrontmatterParseError, splitFrontmatter } from './frontmatter';
 // The safe-subset remark plugins live in the shared @immediately-run/mdx-plugins
 // package (R3-213) so the compiled path here and the SDK's non-executable safe
 // renderer share ONE implementation and can't drift. Bundled into this dist
@@ -59,8 +59,8 @@ export class MdxCompileError extends Error {
 
 /**
  * Compile one `.mdx`/`.md` source to a JSX/JS program string (still pre-Babel).
- * Frontmatter is stripped first (the same `parseFrontmatter` the metadata scan
- * uses) and the `@immediately-run/sdk/MDXProvider` provider import is injected,
+ * Frontmatter is stripped first (the same canon the metadata scan parses with, via
+ * `splitFrontmatter`) and the `@immediately-run/sdk/MDXProvider` provider import is injected,
  * exactly as the sandbox `MDXTransformer` did. `path` is the absolute,
  * sandbox-style module path; `development: true` embeds it in the emitted
  * `jsxDEV` debug info, so compiling AS the runtime path keeps the bytes identical.
@@ -69,7 +69,11 @@ export class MdxCompileError extends Error {
  * so callers have a stable error shape.
  */
 export async function compileMdx(code: string, path: string): Promise<string> {
-  const { data, content } = parseFrontmatter(code);
+  const { data, content, error } = splitFrontmatter(code);
+  // Invalid YAML fails the compile, as it always has (the previous parser threw here). A
+  // block that parses but is not a map, or holds a non-JSON value, compiled before R3-1348
+  // and still does: its metadata is dropped (the scan logs it), its body still renders.
+  if (error?.kind === 'yaml') throw new FrontmatterParseError(error);
   const { compile, remarkGfm } = await loadMdxDeps();
   // §15.1 opt-out (R3-211): `sectionIds: false` forces plain text-slug ids for the
   // whole file. Byte-local — the flag is part of this file's own frontmatter bytes.
