@@ -78,18 +78,23 @@ function adapt(port) {
   };
 }
 
-// Spawn the classic worker in the vm shim, complete the handshake, and return a
-// `{ request, close }` pair that speaks the WorkerMessageBus wire protocol.
-function openWorker() {
+// Spawn the classic worker in the vm shim. Returns its global listeners, which is
+// what a `connect` is delivered to.
+function spawnWorker() {
   assert.ok(
     existsSync(ENTRY),
     `worker bundle missing at ${ENTRY} — run "npm run build:worker" first`,
   );
+  return loadWorker();
+}
 
-  const listeners = loadWorker();
+// Complete one `connect` handshake against a spawned worker and return a
+// `{ request, close }` pair that speaks the WorkerMessageBus wire protocol. A worker
+// takes any number of these — one per frame the parent hands it to.
+function connect(listeners) {
   const { port1: parentPort, port2: workerPort } = new MessageChannel();
 
-  // deliver the one-time connect handshake carrying the worker's port
+  // deliver a connect handshake carrying the worker's end of this channel
   for (const cb of listeners.message.slice()) {
     cb({ data: { type: 'connect' }, ports: [adapt(workerPort)] });
   }
@@ -114,6 +119,43 @@ function openWorker() {
 
   return { request, close: () => parentPort.close() };
 }
+
+// One worker, one connection — what every test below needs.
+const openWorker = () => connect(spawnWorker());
+
+// The parent shares ONE worker across its frames, so the worker must answer every
+// connection it is handed, not only the first. (The handshake used to be one-shot: a
+// second frame's requests then went unanswered until they timed out.)
+test('one worker serves several connections, and each gets its own answers', async () => {
+  const listeners = spawnWorker();
+  const first = connect(listeners);
+  const second = connect(listeners);
+  const third = connect(listeners);
+
+  const transform = (conn, name) =>
+    conn.request('transform', {
+      code: `export const ${name} = 1;`,
+      filepath: `/app/${name}.ts`,
+      config: { presets: [], plugins: [] },
+    });
+  // Interleaved, so a reply routed to the wrong connection would be seen.
+  const [a, b, c] = await Promise.all([
+    transform(first, 'alpha'),
+    transform(second, 'beta'),
+    transform(third, 'gamma'),
+  ]);
+  assert.match(a.code, /alpha/);
+  assert.match(b.code, /beta/);
+  assert.match(c.code, /gamma/);
+
+  // A frame going away must not take the others with it.
+  first.close();
+  const again = await transform(second, 'delta');
+  assert.match(again.code, /delta/);
+
+  second.close();
+  third.close();
+});
 
 test('prebuilt classic worker compiles TS+JSX and collects deps over the MessagePort', async () => {
   const { request, close } = openWorker();

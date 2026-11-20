@@ -24,26 +24,50 @@
 // `importScripts` chunks). The parent transfers a `MessagePort` entangled with one
 // handed into the sandboxed iframe so the iframe can drop `allow-same-origin` and
 // transform requests flow directly.
-import { bindWorkerMessageBus } from '@immediately-run/worker-transport';
+//
+// ONE WORKER, MANY FRAMES. `bindWorkerMessageBus` answers the first `connect` and then
+// stops listening, which forced the parent to spawn a worker per sandboxed frame —
+// three in edit mode (the app, the file explorer, the editor), each loading this 5.5 MB
+// bundle and growing its own Babel heap (about 150 MB apiece during a load). Nothing
+// here is per-frame: a request carries its whole input and the only state is Babel's
+// plugin cache, which is better shared. So this entry binds a bus for EVERY `connect`
+// it is sent, and the parent can hand one worker to all its frames. A parent that
+// still spawns one worker per frame sends one `connect` and sees no difference.
+import { WorkerMessageBus } from '@immediately-run/worker-transport';
 // eslint-disable-next-line import/extensions
 import { transformBabel, compileMdx, type ITransformData } from '../dist/babel/worker-api.js';
 
-bindWorkerMessageBus(self, {
-  channel: 'sandpack-babel',
-  handleRequest: (method, data) => {
-    switch (method) {
-      case 'transform':
-        return transformBabel(data as ITransformData);
-      case 'mdx-compile': {
-        // Returns the compiled JSX program string; throws `MdxCompileError` on a
-        // malformed source. The transport serializes the error's own `line`/`column`
-        // (spread into the wire error) so the iframe's `MDXTransformer` can rebuild a
-        // positioned `BundlerError`.
-        const { code, path } = data as { code: string; path: string };
-        return compileMdx(code, path);
-      }
-      default:
-        return Promise.reject(new Error('Unknown method'));
+const handleRequest = (method: string, data: unknown): Promise<unknown> => {
+  switch (method) {
+    case 'transform':
+      return transformBabel(data as ITransformData);
+    case 'mdx-compile': {
+      // Returns the compiled JSX program string; throws `MdxCompileError` on a
+      // malformed source. The transport serializes the error's own `line`/`column`
+      // (spread into the wire error) so the iframe's `MDXTransformer` can rebuild a
+      // positioned `BundlerError`.
+      const { code, path } = data as { code: string; path: string };
+      return compileMdx(code, path);
     }
-  },
+    default:
+      return Promise.reject(new Error('Unknown method'));
+  }
+};
+
+// The same handshake `bindWorkerMessageBus` installs (its defaults included), minus the
+// `removeEventListener` that made it one-shot. A frame that goes away closes its end of
+// the channel; its bus is then unreachable and collected with the port.
+self.addEventListener('message', (evt: MessageEvent) => {
+  if (!evt.data || evt.data.type !== 'connect') return;
+  const port = evt.ports && evt.ports[0];
+  if (!port) return;
+  port.start();
+  new WorkerMessageBus({
+    channel: 'sandpack-babel',
+    endpoint: port,
+    handleRequest,
+    handleNotification: () => Promise.resolve(),
+    handleError: () => Promise.resolve(),
+    timeoutMs: 30000,
+  });
 });

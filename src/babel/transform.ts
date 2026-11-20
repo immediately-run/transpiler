@@ -106,14 +106,20 @@ export async function transformBabel({
   // the byte-identity contract and this applies to every chain variant equally.
   plugins.push(importMetaShim());
   plugins.push(collectDependencies(requires));
+  // Dependency code is the same split `compact` already draws: nothing maps a
+  // `/node_modules` frame back to its source (the sandbox's error overlay returns those
+  // frames as they are), so an inline map there is a base64 copy of the file that every
+  // frame holds twice — once in the compiled text and once in the script `eval` keeps —
+  // for no reader. App source keeps its map: the overlay and react-refresh's wrap use it.
+  const isDependency = /node_modules/.test(filepath);
   const transformed = babel.transform(code, {
     filename: filepath,
     presets,
     plugins,
     // no ast needed for now
     ast: false,
-    sourceMaps: 'inline',
-    compact: /node_modules/.test(filepath),
+    sourceMaps: isDependency ? false : 'inline',
+    compact: isDependency,
   });
 
   // no-op module
