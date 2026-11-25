@@ -10,7 +10,30 @@ export interface RootPackageShape {
   dependencies?: DepMap;
   peerDependencies?: DepMap;
   peerDependenciesMeta?: Record<string, { optional?: boolean }>;
+  /** npm's `browser` field; only its object form's `"<package>": false` entries are read. */
+  browser?: unknown;
 }
+
+/**
+ * The packages a root `package.json` opts out of the browser (R3-1384): the bare package names
+ * its object-form `browser` field maps to exactly `false` (`"browser": { "csv-parse": false }`),
+ * the npm convention webpack, esbuild and Vite already honour. The string form
+ * (`"browser": "./dist/browser.js"`), path keys (`"./src/node.js": false`) and any value other
+ * than `false` are not package opt-outs and are ignored.
+ */
+export function browserExcludedPackages(pkg: RootPackageShape | undefined | null): ReadonlySet<string> {
+  const field = pkg?.browser;
+  const out = new Set<string>();
+  if (field === null || typeof field !== 'object' || Array.isArray(field)) return out;
+  for (const [key, value] of Object.entries(field as Record<string, unknown>)) {
+    if (value === false && isBarePackageName(key)) out.add(key);
+  }
+  return out;
+}
+
+/** `name` or `@scope/name`: a whole package, not a path or a subpath. */
+const isBarePackageName = (key: string): boolean =>
+  /^(?:@[^/@.\s][^/\s]*\/)?[^/@.\s][^/\s]*$/.test(key);
 
 /**
  * The dependency map a package AT THE ROOT OF A RUN resolves against (R3-289).
@@ -44,7 +67,13 @@ export function rootRuntimeDependencies(pkg: RootPackageShape | undefined | null
     if (meta[name]?.optional) continue;
     peers[name] = range;
   }
-  return { ...peers, ...(pkg?.dependencies ?? {}) };
+  const all: DepMap = { ...peers, ...(pkg?.dependencies ?? {}) };
+  // R3-1384: a package the root maps to `false` in `browser` is never resolved or fetched.
+  // This is the one place the rule lives: the sandbox and the CLI's cache-zip builder both
+  // read this map, so the lockset echo keeps matching (PRETRANSPILED_ARTIFACTS_SPEC §4.4).
+  const excluded = browserExcludedPackages(pkg);
+  for (const name of excluded) delete all[name];
+  return all;
 }
 
 // One entry of the CDN's resolved flat dependency list (the `/dep_tree/` wire

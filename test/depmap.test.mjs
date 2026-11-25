@@ -10,6 +10,7 @@ import {
   isBuildDep,
   isPrereleaseVersion,
   rootRuntimeDependencies,
+  browserExcludedPackages,
 } from '../dist/index.js';
 
 test('assertDependenciesResolved: passes when every requested dep is in the resolved set', () => {
@@ -113,6 +114,44 @@ test('rootRuntimeDependencies: peerDependenciesMeta optional entries are skipped
 test('rootRuntimeDependencies: empty/absent everything yields {}', () => {
   assert.deepEqual(rootRuntimeDependencies({}), {});
   assert.deepEqual(rootRuntimeDependencies(undefined), {});
+});
+
+// --- browserExcludedPackages (R3-1384) ---------------------------------------
+
+test('browserExcludedPackages: an object-form "<package>": false entry is an opt-out', () => {
+  const out = browserExcludedPackages({ browser: { 'csv-parse': false, '@scope/cli-only': false } });
+  assert.deepEqual([...out].sort(), ['@scope/cli-only', 'csv-parse']);
+});
+
+test('browserExcludedPackages: string mappings, path keys, subpaths and non-false values are ignored', () => {
+  const out = browserExcludedPackages({
+    browser: {
+      a: './x.js',
+      './src/x.js': false,
+      'pkg/sub': false,
+      b: true,
+      c: null,
+      d: 0,
+    },
+  });
+  assert.equal(out.size, 0);
+});
+
+test('browserExcludedPackages: the string form, an array and absence yield nothing', () => {
+  assert.equal(browserExcludedPackages({ browser: './dist/browser.js' }).size, 0);
+  assert.equal(browserExcludedPackages({ browser: ['csv-parse'] }).size, 0);
+  assert.equal(browserExcludedPackages({ browser: null }).size, 0);
+  assert.equal(browserExcludedPackages({}).size, 0);
+  assert.equal(browserExcludedPackages(undefined).size, 0);
+});
+
+test('rootRuntimeDependencies: a browser-excluded dependency and a browser-excluded peer are dropped', () => {
+  const out = rootRuntimeDependencies({
+    dependencies: { 'csv-parse': '^7.0.3', yaml: '^2.0.0' },
+    peerDependencies: { react: '^19.0.0' },
+    browser: { 'csv-parse': false, react: false, './bin/cli.js': false },
+  });
+  assert.deepEqual(out, { yaml: '^2.0.0' });
 });
 
 // --- concreteVersion (moved from the sandbox; the re-pin floor) ---------------

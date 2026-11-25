@@ -64,6 +64,7 @@ export {
   concreteVersion,
   isPrereleaseVersion,
   rootRuntimeDependencies,
+  browserExcludedPackages,
 } from './depmap';
 export type { RootPackageShape, UnrequestedPrerelease } from './depmap';
 export type { DepMap, ResolvedDependency } from './depmap';
