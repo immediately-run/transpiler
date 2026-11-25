@@ -829,6 +829,9 @@ that renders Markdown itself opts in by wrapping its content in the exported `Pr
 - Every rule **reads** a public token as `var(--<name>, var(--_ir-<name>))`. The defaults live in
   private `--_ir-*` properties on `.ir-prose` (and `.ir-prose[data-theme="dark"]`). The SDK never
   declares a public name, so a value set on any ancestor, or on the article itself, wins.
+- The column is centred by a three-track grid on the article itself (`--page-gutter` minimum on
+  each side, `--prose-measure` in the middle), with every child in the middle track. It is
+  resolved against the article, so a `<Prose>` placed beside a sidebar keeps its full measure.
 
 ### 16.3 The tokens
 
@@ -856,9 +859,11 @@ paint at once.
 
 ### 16.4 The heading anchor
 
-On devices with hover, the `<HeadingAnchor>` (§15.4) is positioned in the left gutter and appears
-on heading hover or keyboard focus (`:focus-visible`), so heading text starts flush. Under `(hover: none)` it floats to
-the end of the heading's first line at reduced opacity, with a box of at least 24×24 CSS px.
+On devices with hover and a viewport at least `48rem` wide, the `<HeadingAnchor>` (§15.4) is
+positioned in the left gutter and appears on heading hover or keyboard focus (`:focus-visible`), so
+heading text starts flush. Under `(hover: none)`, or below `48rem` (where the gutter shrinks to
+`--page-gutter`, narrower than an h1's `#`), it floats to the end of the heading's first line at
+reduced opacity, with a box of at least 24×24 CSS px.
 
 ### 16.5 Decisions
 
@@ -874,6 +879,15 @@ the end of the heading's first line at reduced opacity, with a box of at least 2
   text with `code` or a link.
 - **Wrap Markdown only** (2026-11-25). *Rejected:* wrapping every routed file, which would restyle
   apps.
+- **`.md` and `.mdx` only** (review, 2026-11-25). *Rejected:* also wrapping `.markdown`, as the
+  item first prescribed: the chain never compiles it as MDX (§2), so there is nothing to style.
+- **The stylesheet goes first in `<head>`** (review, 2026-11-25). *Rejected:* appending it, which
+  ranks `ir.defaults` above any layer the app declared earlier; and asking apps to pre-declare
+  `@layer ir.defaults, …;`, which every app would have to know to do.
+- **Centre with a grid on the article** (review, 2026-11-25). *Rejected:* a `max-inline-size` cap
+  on each child, because `ch` resolves in each element's own font and a heading's or code block's
+  column then differs from the body's; and percentage `padding-inline`, which resolves against the
+  parent and squeezes a `<Prose>` used as a flex item.
 
 ## Decisions & rejected alternatives
 
