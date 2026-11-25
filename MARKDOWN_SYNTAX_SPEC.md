@@ -1,6 +1,6 @@
 # immediately.run Markdown / MDX syntax — the v1 authoring target
 
-**Status:** draft — the v1 MDX support target (built surface + v1 proposals) · **Updated:** 2026-07-05
+**Status:** draft — the v1 MDX support target (built surface + v1 proposals) · **Updated:** 2026-11-25
 
 > **This document is now two things at once.** §1–§9 are `reference` — hand-mirrored
 > from the shipped compile chain (`src/mdx/`), describing what the code compiles
@@ -13,7 +13,7 @@
 > resolving `<WikiLink>` shipped in the SDK. §14 (ESM-in-links) is `reference` too —
 > its supported/rejected forms are confirmed and locked by a golden test (R3-154);
 > no compiler change was needed (link destinations stay literal; dynamic URLs/targets
-> use JSX). §11–§15 have all landed and are `reference`. **§15 (heading slugs &
+> use JSX). §11–§16 have all landed and are `reference` (§16, the default typography, R3-1377). **§15 (heading slugs &
 > autolinks) SHIPPED 2026-07-10 (R3-186 + R3-211, `src/mdx/remarkHeadingAnchors.ts`
 > + the SDK default `<HeadingAnchor>`)** — it *reversed* the earlier "no heading
 > anchors / slugs, no v1 change planned" call recorded in §7 and Decisions (see that
@@ -730,9 +730,8 @@ Every ATX/Setext heading (`#` … `######`) gains:
     (`-1`, `-2`, …) in document order — a per-file counter that stays byte-local (§15.3).
 - **An autolink anchor.** An anchor pointing at `#<slug>` is **prepended** as the heading's first
   child, so a reader can link directly to the heading. It renders through a default
-  `<HeadingAnchor>` component (§15.4), styled minimally (an `aria`-labeled `#`/link affordance apps
-  typically reveal on hover) — presentation is app-owned, consistent with the "GFM on, presentation
-  app-owned" stance (§5, §12.3).
+  `<HeadingAnchor>` component (§15.4): an `aria`-labeled `#` link. Its default look comes from the
+  SDK's prose stylesheet (§16.4); an app restyles or replaces it (§15.4).
 
 A heading that already carries an explicit `id` (e.g. authored as JSX, `<h2 id="x">…`) is left
 alone — the plugin never overwrites an author-set `id`, and emits no second anchor for it.
@@ -774,18 +773,20 @@ index at all — the whole feature is compile-time and self-contained per file.
 The heading stays an intrinsic `<h1>`…`<h6>` (already overridable through the provider, §6.4) — it
 just gains an `id` prop. Only the **injected autolink anchor** is a new component: the SDK ships a
 default `<HeadingAnchor>` in `DEFAULT_MDX_COMPONENTS` (§11.2) rendering semantic, accessible markup
-(an `<a href="#slug">` with an accessible label, intentionally minimal styling). Because it is one
+(an `<a href="#slug">` with an accessible label; its default look is §16.4's). Because it is one
 of the always-present phantom defaults, a code-less markdown repo renders heading anchors with
 **zero** app cooperation and the missing-reference guard never fires (§11.2). A Grove-class app
 overrides `<HeadingAnchor>` once (§11.1/§11.3) to change the icon, position, or behavior (e.g.
 copy-permalink-to-clipboard) of *every* heading anchor in *every* content file — the same
 late-binding win that motivated compiling admonitions/wiki-links to components.
 
-> **Honesty note (v1):** the default `<HeadingAnchor>` is structural, not visually rich (no
-> hover-reveal animation, no icon set). Apps that want GitHub-style hover anchors ship CSS targeting
-> its `ir-heading-anchor` class or override the component. The autolink is emitted for **every**
-> heading unconditionally; the `sectionIds: false` frontmatter flag (§15.1) is the file-level
-> opt-out for the section-id scheme (not for the anchor itself).
+> **Styling (amended 2026-11-25, R3-1377):** the component's markup is unchanged and still
+> structural. Its look now comes from the SDK's default prose stylesheet (§16): in the left gutter,
+> revealed on hover or focus, on devices with hover; floated to the end of the heading's line on
+> touch devices. Apps still restyle it through the `ir-heading-anchor` class or replace the
+> component. The autolink is emitted for **every** heading unconditionally; the `sectionIds: false`
+> frontmatter flag (§15.1) is the file-level opt-out for the section-id scheme (not for the anchor
+> itself).
 
 ### 15.5 Interaction notes
 
@@ -800,6 +801,93 @@ late-binding win that motivated compiling admonitions/wiki-links to components.
   concern (as with any component-composed ids), out of scope for the compile-time plugin.
 - **Non-heading `#` text is untouched.** The plugin only rewrites `heading` nodes; a literal `#` in
   prose or a code span is left alone.
+
+## 16. Default typography  *(reference — R3-1377, `@immediately-run/sdk` ≥ 0.95.0)*
+
+A Markdown file rendered by the SDK's `FileRouter` used to get the browser's defaults: Times at the
+full window width, 8px margins, code with no surface and a `#` against every heading. A repo with no
+app had no one to style it. The SDK now ships a default.
+
+### 16.1 What gets it
+
+`FileRouter` wraps a routed file in `<Prose>` (an `<article class="ir-prose" data-theme="…">`)
+when its path ends in `.md` or `.mdx`, case-insensitive: the extensions this chain compiles as MDX
+(§2). A routed `.tsx`, `.js`, `.html` or `.markdown` file renders unwrapped. For the first three
+the wrapper would restyle that app's own interface; a `.markdown` file is not compiled as MDX at all. An app
+that renders Markdown itself opts in by wrapping its content in the exported `Prose` component.
+`data-theme` follows the host theme polarity live (`useHostTheme()`).
+
+### 16.2 The cascade contract
+
+- The whole stylesheet sits in `@layer ir.defaults`. Any unlayered author rule wins over it whatever
+  its specificity, so an app's plain `h2 { … }` overrides it with no `!important` on either side.
+- The SDK injects it once per document as a `<style id="ir-sdk-prose-styles">`, placed **first**
+  in `<head>`. Cascade layers rank by the order they first appear, later layers winning, so first
+  place makes `ir.defaults` the lowest layer: an app's own layered rules (Tailwind's `base`,
+  `components`, `utilities`) beat it as well as its unlayered ones. A published library cannot
+  import a CSS file in the sandbox (a dist CSS import is evaluated as JavaScript).
+- Every rule **reads** a public token as `var(--<name>, var(--_ir-<name>))`. The defaults live in
+  private `--_ir-*` properties on `.ir-prose` (and `.ir-prose[data-theme="dark"]`). The SDK never
+  declares a public name, so a value set on any ancestor, or on the article itself, wins.
+- The column is centred by a three-track grid on the article itself (`--page-gutter` minimum on
+  each side, `--prose-measure` in the middle), with every child in the middle track. It is
+  resolved against the article, so a `<Prose>` placed beside a sidebar keeps its full measure.
+
+### 16.3 The tokens
+
+The names are Grove's wherever Grove has one with the same meaning
+(`docs/content/plans/grove-layouts-and-themes/02-theme-contract.mdx` §2). The table is
+`PROSE_TOKENS` in `immediately-run-sdk/src/proseStyles.ts`, which is its one home. This summary is
+only a summary.
+
+| token | role | default |
+|---|---|---|
+| `--bg` | page surface | `transparent` (the sandbox paints the canvas per polarity) |
+| `--ink`, `--ink-2`, `--ink-3` | body text, muted text, the heading `#` | per polarity |
+| `--line` | rules and borders | per polarity |
+| `--panel` | code and table-header surface | per polarity |
+| `--accent` | links | per polarity |
+| `--sans`, `--disp`, `--mono` | body, headings, code faces | system stacks; `--disp` falls back to `--sans` |
+| `--disp-weight` | heading weight | `700` |
+| `--prose-measure`, `--prose-leading` | line length, line height | `68ch`, `1.65` |
+| `--page-gutter` | minimum side padding | `clamp(1.25rem, 5vw, 3rem)` |
+| `--radius-shape` | corner radius | `8px` |
+| `--prose-size`, `--prose-flow` | body size, block spacing (no Grove equivalent) | `1.0625rem`, `1.1em` |
+
+No web font is loaded: the hardened stance's `font-src` refuses remote faces, and system stacks
+paint at once.
+
+### 16.4 The heading anchor
+
+On devices with hover and a viewport at least `48rem` wide, the `<HeadingAnchor>` (§15.4) is
+positioned in the left gutter and appears on heading hover or keyboard focus (`:focus-visible`), so
+heading text starts flush. Under `(hover: none)`, or below `48rem` (where the gutter shrinks to
+`--page-gutter`, narrower than an h1's `#`), it floats to the end of the heading's first line at
+reduced opacity, with a box of at least 24×24 CSS px.
+
+### 16.5 Decisions
+
+- **Layer, not specificity** (2026-11-25). *Rejected:* low-specificity selectors (`:where()`).
+  They lose to author rules only until the author writes something equally weak, and an app's
+  global reset would then fight the defaults.
+- **Read public tokens, never declare them** (2026-11-25). *Rejected:* declaring the public names
+  on `.ir-prose`. That would shadow every value an app or theme sets higher in the tree.
+- **Grove's token names** (owner, 2026-11-25: "share what you can"). *Rejected:* an `--ir-prose-*`
+  family, which would give the platform two names for one role.
+- **Float the touch anchor; never reverse the heading into a flex row** (2026-11-25). A flex row
+  turns every text run and inline element into its own flex item, which breaks a heading that mixes
+  text with `code` or a link.
+- **Wrap Markdown only** (2026-11-25). *Rejected:* wrapping every routed file, which would restyle
+  apps.
+- **`.md` and `.mdx` only** (review, 2026-11-25). *Rejected:* also wrapping `.markdown`, as the
+  item first prescribed: the chain never compiles it as MDX (§2), so there is nothing to style.
+- **The stylesheet goes first in `<head>`** (review, 2026-11-25). *Rejected:* appending it, which
+  ranks `ir.defaults` above any layer the app declared earlier; and asking apps to pre-declare
+  `@layer ir.defaults, …;`, which every app would have to know to do.
+- **Centre with a grid on the article** (review, 2026-11-25). *Rejected:* a `max-inline-size` cap
+  on each child, because `ch` resolves in each element's own font and a heading's or code block's
+  column then differs from the body's; and percentage `padding-inline`, which resolves against the
+  parent and squeezes a `<Prose>` used as a flex item.
 
 ## Decisions & rejected alternatives
 
@@ -894,12 +982,7 @@ late-binding win that motivated compiling admonitions/wiki-links to components.
 
 - **Admonition default styling.** How much default CSS/icons ship in the SDK vs. are left to apps
   (§12.3). *(The plugin-choice half is settled — in-house, see Decisions.)*
-- **HeadingAnchor default styling (§15).** How much default CSS/icon ships with the default
-  `<HeadingAnchor>` vs. is left to apps (parallels the admonition question). *(Settled at build,
-  R3-186/R3-211: in-house remark plugin, `id` on the heading + component anchor, autolink on for
-  **every** heading, `sectionIds: false` frontmatter opt-out for the section-id scheme — see
-  §15.1/§15.2/§15.4 and Decisions. The default anchor ships intentionally-minimal `ir-heading-anchor`
-  markup; richer styling is app-owned.)*
+- **HeadingAnchor default styling (§15).** *Settled 2026-11-25 by §16 (R3-1377).*
 - **The per-app plugin seam.** Keep new syntax kernel-only (current stance), or design an opt-in
   per-app rehype/remark layer that preserves per-file byte-identity? (Supersedes the prior
   "opt-in rehype layer" question.)
