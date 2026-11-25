@@ -900,12 +900,13 @@ directory:
 
 - if the marker's `styles` field is a string, it names the token file, relative to the marker's
   directory. It must stay inside that directory: an absolute path, a URL or scheme, or a `..`
-  segment is refused;
+  segment is refused with a warning, and then no author tokens apply beneath the marker (there is
+  no fallback to `immediately.run.css`);
 - `styles: false` turns author tokens off for everything beneath the marker;
 - otherwise, with no `styles` or no marker, `immediately.run.css` applies if it exists.
 
-A marker without a token file still ends the walk. So a bundle never inherits its repo root's
-tokens unless its marker names them. An unparseable marker, or a `styles` of another type, warns
+A marker without a token file still ends the walk, so a bundle never inherits its repo root's
+tokens. (A `styles` name cannot reach above the marker's directory either.) An unparseable marker, or a `styles` of another type, warns
 and counts as absent. A named file that is missing warns; a missing default file is silent.
 
 **Grammar** (the token-only rule of Grove plans 05 §3):
@@ -933,8 +934,10 @@ the `:root` values, then the block for the current `data-theme` polarity. It rem
 set before re-applying (on a theme push or a file change) and on unmount. The page renders with the
 defaults at once, and the tokens apply when the read settles; the page never waits on the file.
 Edits to the token file, or to a marker or token file on the walked path, re-apply without a
-reload (`openAppFs().onChange`). Every refusal logs one `console.warn` naming the file and the
-reason. `FileRouter` passes the routed path; an app's own `<Prose filename="…">` opts in the same
+reload (`openAppFs().onChange`). So does creating a file a marker's `styles` names but which did
+not exist yet. Each refused file, refused `styles` value or dropped declaration logs one
+`console.warn` naming the file and the reason, on every read. A read that fails for a reason other
+than absence warns with the path, rather than being taken for a missing file. `FileRouter` passes the routed path; an app's own `<Prose filename="…">` opts in the same
 way.
 
 The names `immediately.run.css` and `immediately.run.json` are spelled once, in
