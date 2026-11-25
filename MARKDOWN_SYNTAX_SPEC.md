@@ -899,15 +899,17 @@ directory holding `immediately.run.json` (the bundle marker) or `immediately.run
 directory:
 
 - if the marker's `styles` field is a string, it names the token file, relative to the marker's
-  directory. It must stay inside that directory: an absolute path, a URL or scheme, or a `..`
-  segment is refused with a warning, and then no author tokens apply beneath the marker (there is
-  no fallback to `immediately.run.css`);
+  directory. It must stay inside that directory: an absolute path, a URL or scheme, a `..`
+  segment, or a value that names no file (`""`, `.`) is refused with a warning, and then no
+  author tokens apply beneath the marker (there is no fallback to `immediately.run.css`);
 - `styles: false` turns author tokens off for everything beneath the marker;
 - otherwise, with no `styles` or no marker, `immediately.run.css` applies if it exists.
 
 A marker without a token file still ends the walk, so a bundle never inherits its repo root's
-tokens. (A `styles` name cannot reach above the marker's directory either.) An unparseable marker, or a `styles` of another type, warns
-and counts as absent. A named file that is missing warns; a missing default file is silent.
+tokens. (A `styles` name cannot reach above the marker's directory either.) An unparseable marker
+still ends the walk: it warns, and only its `styles` counts as absent, so that directory's
+`immediately.run.css` applies if it exists. A `styles` of another type warns and counts as
+absent. A named file that is missing warns; a missing default file is silent.
 
 **Grammar** (the token-only rule of Grove plans 05 §3):
 
