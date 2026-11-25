@@ -889,6 +889,82 @@ reduced opacity, with a box of at least 24×24 CSS px.
   column then differs from the body's; and percentage `padding-inline`, which resolves against the
   parent and squeezes a `<Prose>` used as a flex item.
 
+### 16.6 Author token file  *(R3-1378, `@immediately-run/sdk` ≥ 0.96.0)*
+
+A repo or bundle restyles its rendered Markdown with a token file. It can set tokens only. An
+author who wants arbitrary CSS writes an app (§16.2's unlayered-rule path).
+
+**Lookup.** Start at the routed file's directory and walk up to the repo root. Stop at the first
+directory holding `immediately.run.json` (the bundle marker) or `immediately.run.css`. In that
+directory:
+
+- if the marker's `styles` field is a string, it names the token file, relative to the marker's
+  directory. It must stay inside that directory: an absolute path, a URL or scheme, a `..`
+  segment, or a value that names no file (`""`, `.`) is refused with a warning, and then no
+  author tokens apply beneath the marker (there is no fallback to `immediately.run.css`);
+- `styles: false` turns author tokens off for everything beneath the marker;
+- otherwise, with no `styles` or no marker, `immediately.run.css` applies if it exists.
+
+A marker without a token file still ends the walk, so a bundle never inherits its repo root's
+tokens. (A `styles` name cannot reach above the marker's directory either.) An unparseable marker
+still ends the walk: it warns, and only its `styles` counts as absent, so that directory's
+`immediately.run.css` applies if it exists. A `styles` of another type warns and counts as
+absent. A named file that is missing warns; a missing default file is silent.
+
+**Grammar** (the token-only rule of Grove plans 05 §3):
+
+```css
+/* comments are allowed */
+:root { --accent: #9c3d1b; --sans: "Iowan Old Style", Georgia, serif; }
+:root[data-theme="light"] { --bg: #fbf8f1; }
+:root[data-theme="dark"]  { --bg: #1c1a17; }
+```
+
+- Only those three selectors, in either quote style. Only `--name: value;` declarations.
+- Any at-rule, any other selector or selector list, any non-custom property, or a nested block
+  refuses the **whole file**.
+- A name that is not in `PROSE_TOKENS` (§16.3) is dropped with a warning, so a file written for a
+  later SDK still applies what this one knows.
+- A value is dropped if it contains `url(`, `image(`, `image-set(`, `cross-fade(`, `element(`,
+  `src(`, `@`, `\`, `;`, `{`, `}`, `<` or `>` (case-insensitive), or if it is longer than 256
+  characters.
+- A file over 16384 bytes is refused unread.
+- The polarity blocks win over `:root` for their polarity.
+
+**Apply.** `Prose` sets each surviving value with `style.setProperty` on its own `<article>`:
+the `:root` values, then the block for the current `data-theme` polarity. It removes everything it
+set before re-applying (on a theme push or a file change) and on unmount. The page renders with the
+defaults at once, and the tokens apply when the read settles; the page never waits on the file.
+Edits to the token file, or to a marker or token file on the walked path, re-apply without a
+reload (`openAppFs().onChange`). So does creating a file a marker's `styles` names but which did
+not exist yet. Each refused file, refused `styles` value or dropped declaration logs one
+`console.warn` naming the file and the reason, on every read. A read that fails for a reason other
+than absence warns with the path, rather than being taken for a missing file. `FileRouter` passes the routed path; an app's own `<Prose filename="…">` opts in the same
+way.
+
+The names `immediately.run.css` and `immediately.run.json` are spelled once, in
+`immediately-run-sdk/src/proseTokens.ts`.
+
+**Decisions**
+
+- **Tokens, never CSS** (2026-11-25). On a shared space an interpreted renderer runs with no CSP
+  (Grove plans 05 §2.2). One attribute selector with `background-image: url(…)` would be an
+  existence oracle over other writers' files. *Rejected:* injecting the file as a stylesheet, even
+  inside `@layer ir.defaults`; and accepting arbitrary selectors "for power users".
+- **`setProperty`, not a generated `<style>`** (2026-11-25). A value passed to `setProperty`
+  cannot leave its declaration, and there is no selector to abuse. *Rejected:* serialising the
+  parsed tokens into CSS text, which would put author bytes back into a stylesheet.
+- **Refuse the shape, drop the value** (2026-11-25). A wrong selector or an at-rule means the
+  file is not a token file, so all of it is refused. A bad value or an unknown name is one
+  declaration's problem, and only that declaration is dropped.
+- **A default name, overridable by the marker** (owner, 2026-11-25: "sane default filename,
+  optionally overrideable from immediately.run.json"). *Rejected:* a marker field alone, which
+  would make a plain Markdown repo with no marker unable to restyle.
+- **Refuse `\` outright** (2026-11-25). CSS escapes can spell `url(` without its letters
+  (`u\72l(`). No token needs an escape.
+- **The size is checked before the read** (2026-11-25). The lookup returns the
+  file's size from `stat`, so an oversized file is never read on the first-paint path.
+
 ## Decisions & rejected alternatives
 
 - **`.md` and `.mdx` share one MDX pipeline** (no separate plain-CommonMark mode). *Rejected:*
