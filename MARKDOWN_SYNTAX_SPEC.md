@@ -730,9 +730,8 @@ Every ATX/Setext heading (`#` … `######`) gains:
     (`-1`, `-2`, …) in document order — a per-file counter that stays byte-local (§15.3).
 - **An autolink anchor.** An anchor pointing at `#<slug>` is **prepended** as the heading's first
   child, so a reader can link directly to the heading. It renders through a default
-  `<HeadingAnchor>` component (§15.4), styled minimally (an `aria`-labeled `#`/link affordance apps
-  typically reveal on hover) — presentation is app-owned, consistent with the "GFM on, presentation
-  app-owned" stance (§5, §12.3).
+  `<HeadingAnchor>` component (§15.4): an `aria`-labeled `#` link. Its default look comes from the
+  SDK's prose stylesheet (§16.4); an app restyles or replaces it (§15.4).
 
 A heading that already carries an explicit `id` (e.g. authored as JSX, `<h2 id="x">…`) is left
 alone — the plugin never overwrites an author-set `id`, and emits no second anchor for it.
@@ -774,7 +773,7 @@ index at all — the whole feature is compile-time and self-contained per file.
 The heading stays an intrinsic `<h1>`…`<h6>` (already overridable through the provider, §6.4) — it
 just gains an `id` prop. Only the **injected autolink anchor** is a new component: the SDK ships a
 default `<HeadingAnchor>` in `DEFAULT_MDX_COMPONENTS` (§11.2) rendering semantic, accessible markup
-(an `<a href="#slug">` with an accessible label, intentionally minimal styling). Because it is one
+(an `<a href="#slug">` with an accessible label; its default look is §16.4's). Because it is one
 of the always-present phantom defaults, a code-less markdown repo renders heading anchors with
 **zero** app cooperation and the missing-reference guard never fires (§11.2). A Grove-class app
 overrides `<HeadingAnchor>` once (§11.1/§11.3) to change the icon, position, or behavior (e.g.
@@ -812,8 +811,9 @@ app had no one to style it. The SDK now ships a default.
 ### 16.1 What gets it
 
 `FileRouter` wraps a routed file in `<Prose>` (an `<article class="ir-prose" data-theme="…">`)
-when its path ends in `.md`, `.mdx` or `.markdown`, case-insensitive. A routed `.tsx`, `.js` or
-`.html` file renders unwrapped, because the wrapper would restyle that app's own interface. An app
+when its path ends in `.md` or `.mdx`, case-insensitive: the extensions this chain compiles as MDX
+(§2). A routed `.tsx`, `.js`, `.html` or `.markdown` file renders unwrapped. For the first three
+the wrapper would restyle that app's own interface; a `.markdown` file is not compiled as MDX at all. An app
 that renders Markdown itself opts in by wrapping its content in the exported `Prose` component.
 `data-theme` follows the host theme polarity live (`useHostTheme()`).
 
@@ -821,8 +821,11 @@ that renders Markdown itself opts in by wrapping its content in the exported `Pr
 
 - The whole stylesheet sits in `@layer ir.defaults`. Any unlayered author rule wins over it whatever
   its specificity, so an app's plain `h2 { … }` overrides it with no `!important` on either side.
-- The SDK injects it once per document as a `<style id="ir-sdk-prose-styles">`. A published
-  library cannot import a CSS file in the sandbox (a dist CSS import is evaluated as JavaScript).
+- The SDK injects it once per document as a `<style id="ir-sdk-prose-styles">`, placed **first**
+  in `<head>`. Cascade layers rank by the order they first appear, later layers winning, so first
+  place makes `ir.defaults` the lowest layer: an app's own layered rules (Tailwind's `base`,
+  `components`, `utilities`) beat it as well as its unlayered ones. A published library cannot
+  import a CSS file in the sandbox (a dist CSS import is evaluated as JavaScript).
 - Every rule **reads** a public token as `var(--<name>, var(--_ir-<name>))`. The defaults live in
   private `--_ir-*` properties on `.ir-prose` (and `.ir-prose[data-theme="dark"]`). The SDK never
   declares a public name, so a value set on any ancestor, or on the article itself, wins.
@@ -854,7 +857,7 @@ paint at once.
 ### 16.4 The heading anchor
 
 On devices with hover, the `<HeadingAnchor>` (§15.4) is positioned in the left gutter and appears
-on heading hover or anchor focus, so heading text starts flush. Under `(hover: none)` it floats to
+on heading hover or keyboard focus (`:focus-visible`), so heading text starts flush. Under `(hover: none)` it floats to
 the end of the heading's first line at reduced opacity, with a box of at least 24×24 CSS px.
 
 ### 16.5 Decisions
