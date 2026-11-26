@@ -75,18 +75,18 @@ export function selectReactChain(filepath: string): ReactChain | null {
 }
 
 /**
- * The react preset's dependency augmentation, moved verbatim from
- * `ReactPreset.augmentDependencies`. The CLI needs this to compute the same
- * input DepMap the runtime resolves (`computeInputDepMap`). Mutates and returns
- * the passed map, matching the sandbox.
- */
-/**
  * The `core-js` version the platform adds to every app's input DepMap. The one home
  * for it: the sandbox's presets and the CLI's tests import it, and the CLI's own
  * `core-js` dependency is checked against it by `check:platform-provided`.
  */
 export const PLATFORM_CORE_JS_VERSION = '3.51.0';
 
+/**
+ * The react preset's dependency augmentation, moved verbatim from
+ * `ReactPreset.augmentDependencies`. The CLI needs this to compute the same
+ * input DepMap the runtime resolves (`computeInputDepMap`). Mutates and returns
+ * the passed map, matching the sandbox.
+ */
 export function augmentDependencies(dependencies: DepMap): DepMap {
   if (!dependencies['react-refresh']) {
     dependencies['react-refresh'] = '^0.11.0';

@@ -11,6 +11,7 @@ import {
   isPrereleaseVersion,
   rootRuntimeDependencies,
   browserExcludedPackages,
+  PLATFORM_CORE_JS_VERSION,
 } from '../dist/index.js';
 
 test('assertDependenciesResolved: passes when every requested dep is in the resolved set', () => {
@@ -54,13 +55,21 @@ test('computeInputDepMap: augments, filters build deps, strips self-hosted, sort
   });
   // self-hosted + build deps removed; preset augments added; keys sorted.
   assert.deepEqual(out, {
-    'core-js': '3.51.0',
+    'core-js': PLATFORM_CORE_JS_VERSION,
     react: '^19.0.0',
     'react-error-boundary': '^6.1.0',
     'react-refresh': '^0.11.0',
   });
   // key order is sorted
   assert.deepEqual(Object.keys(out), Object.keys(out).slice().sort());
+});
+
+test('PLATFORM_CORE_JS_VERSION: the exported pin is the one augmentDependencies injects, and is 3.51.0', () => {
+  // The literal once, so a silent change to the constant is a red test; the sandbox and
+  // the CLI import the constant, so a divergence between it and the injected value would
+  // break every lockset echo while the map assertion above stayed green.
+  assert.equal(PLATFORM_CORE_JS_VERSION, '3.51.0');
+  assert.equal(computeInputDepMap({ 'core-js': '^3.0.0' })['core-js'], PLATFORM_CORE_JS_VERSION);
 });
 
 test('computeInputDepMap: keeps an app-declared react-refresh range', () => {
