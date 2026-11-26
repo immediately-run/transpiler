@@ -23,7 +23,7 @@ export const REACT_REFRESH_BABEL_CONFIG = {
   presets: [['react', { runtime: 'automatic' }]],
   plugins: [
     ['react-refresh/babel', { skipEnvCheck: true }],
-    '@babel/plugin-proposal-explicit-resource-management',
+    '@babel/plugin-transform-explicit-resource-management',
   ],
 };
 
@@ -80,11 +80,18 @@ export function selectReactChain(filepath: string): ReactChain | null {
  * input DepMap the runtime resolves (`computeInputDepMap`). Mutates and returns
  * the passed map, matching the sandbox.
  */
+/**
+ * The `core-js` version the platform adds to every app's input DepMap. The one home
+ * for it: the sandbox's presets and the CLI's tests import it, and the CLI's own
+ * `core-js` dependency is checked against it by `check:platform-provided`.
+ */
+export const PLATFORM_CORE_JS_VERSION = '3.51.0';
+
 export function augmentDependencies(dependencies: DepMap): DepMap {
   if (!dependencies['react-refresh']) {
     dependencies['react-refresh'] = '^0.11.0';
   }
-  dependencies['core-js'] = '3.22.7';
+  dependencies['core-js'] = PLATFORM_CORE_JS_VERSION;
   dependencies['react-error-boundary'] = '^6.1.0';
   return dependencies;
 }

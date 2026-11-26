@@ -22,10 +22,10 @@ const BABEL_PLUGIN_LOADERS: Map<string, LoaderFn> = new Map([
     },
   ],
   [
-    '@babel/plugin-proposal-explicit-resource-management',
+    '@babel/plugin-transform-explicit-resource-management',
     () => {
       // @ts-ignore - no types shipped
-      return import('@babel/plugin-proposal-explicit-resource-management');
+      return import('@babel/plugin-transform-explicit-resource-management');
     },
   ],
 ]);

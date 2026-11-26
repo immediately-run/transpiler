@@ -34,6 +34,10 @@ async function getPresets(presets: any): Promise<PluginItem[]> {
       {
         targets: '> 2.5%, not ie 11, not dead, not op_mini all',
         useBuiltIns: 'usage',
+        // The polyfill DATA level, not the installed package: it decides which
+        // `core-js/modules/*` imports Babel injects. It deliberately trails
+        // PLATFORM_CORE_JS_VERSION (every module 3.22 selects exists in 3.51), so
+        // raising it is an output change with its own goldens.
         corejs: '3.22',
         exclude: ['@babel/plugin-transform-regenerator'],
       },

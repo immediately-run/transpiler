@@ -65,6 +65,6 @@ npm run typecheck    # tsc --noEmit
 npm test            # build, then node --test (parity + unit)
 ```
 
-The Babel toolchain (`@babel/standalone`, `@babel/plugin-proposal-explicit-resource-management`,
+The Babel toolchain (`@babel/standalone`, `@babel/plugin-transform-explicit-resource-management`,
 `react-refresh`) is pinned to exact versions: those versions *are* part of the
 stamp, so a consumer must install the same ones for the bytes to match.

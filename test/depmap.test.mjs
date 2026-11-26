@@ -54,7 +54,7 @@ test('computeInputDepMap: augments, filters build deps, strips self-hosted, sort
   });
   // self-hosted + build deps removed; preset augments added; keys sorted.
   assert.deepEqual(out, {
-    'core-js': '3.22.7',
+    'core-js': '3.51.0',
     react: '^19.0.0',
     'react-error-boundary': '^6.1.0',
     'react-refresh': '^0.11.0',
