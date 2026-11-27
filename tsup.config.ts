@@ -29,7 +29,7 @@ export default defineConfig({
   noExternal: ['@immediately-run/mdx-plugins'],
   external: [
     '@babel/standalone',
-    '@babel/plugin-proposal-explicit-resource-management',
+    '@babel/plugin-transform-explicit-resource-management',
     'react-refresh/babel',
     // ESM-only; loaded via a dynamic `import()` in src/mdx/compile.ts and kept
     // external so the CJS build never statically `require()`s them (and so the

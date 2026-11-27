@@ -1,6 +1,6 @@
 {
   "name": "@immediately-run/transpiler",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "The single source of truth for immediately.run's per-file transform chain (MDX + Babel + react-refresh), shared byte-for-byte between the browser sandbox bundler and the CLI's pre-transpiled-artifact emitter.",
   "license": "MIT",
   "repository": "github:immediately-run/transpiler",
@@ -33,7 +33,7 @@
     "prepublishOnly": "npm run build && npm run build:worker"
   },
   "dependencies": {
-    "@babel/plugin-proposal-explicit-resource-management": "7.25.9",
+    "@babel/plugin-transform-explicit-resource-management": "7.29.15",
     "@babel/standalone": "7.27.0",
     "@immediately-run/mdx-plugins": "0.8.0",
     "@immediately-run/worker-transport": "^0.1.0",

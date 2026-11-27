@@ -25,6 +25,7 @@ export {
   selectReactChain,
   isTransformable,
   augmentDependencies,
+  PLATFORM_CORE_JS_VERSION,
   REACT_REFRESH_BABEL_CONFIG,
   PLAIN_BABEL_CONFIG,
 } from './presets/react';
